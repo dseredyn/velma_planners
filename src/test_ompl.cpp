@@ -99,7 +99,7 @@ public:
         double qx, qy, qz, qw;
         T_B_F.M.GetQuaternion(q[0], q[1], q[2], q[3]);
         transform.setRotation(q);
-        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base", frame_id));
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", frame_id));
     }
 
     int publishRobotModelVis(int m_id, const boost::shared_ptr<self_collision::CollisionModel> &col_model, const std::vector<KDL::Frame > &T) {
@@ -112,11 +112,11 @@ public:
                 }
                 else if ((*it)->geometry->type == self_collision::Geometry::SPHERE) {
                     self_collision::Sphere *sphere = static_cast<self_collision::Sphere* >((*it)->geometry.get());
-                    m_id = markers_pub_.addSinglePointMarker(m_id, T_B_O.p, 0, 1, 0, 1, sphere->radius*2, "base");
+                    m_id = markers_pub_.addSinglePointMarker(m_id, T_B_O.p, 0, 1, 0, 1, sphere->radius*2, "world");
                 }
                 else if ((*it)->geometry->type == self_collision::Geometry::CAPSULE) {
                     self_collision::Capsule *capsule = static_cast<self_collision::Capsule* >((*it)->geometry.get());
-                    m_id = markers_pub_.addCapsule(m_id, T_B_O, capsule->length, capsule->radius, "base");
+                    m_id = markers_pub_.addCapsule(m_id, T_B_O, capsule->length, capsule->radius, "world");
                 }
             }
         }
@@ -293,7 +293,6 @@ public:
         //
         boost::shared_ptr<KinematicModel > kin_model( new KinematicModel(robot_description_str, joint_names) );
         kin_model->setIgnoredJointValue("torso_1_joint", -90.0/180.0*PI);
-        kin_model->setIgnoredJointValue("torso_2_joint", 90.0/180.0*PI);
         Eigen::VectorXd ign_q;
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
