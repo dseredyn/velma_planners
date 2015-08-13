@@ -204,8 +204,8 @@ public:
             kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), x);
         }
 
-//        std::cout << "isStateValid: collisions: " << link_collisions.size() << std::endl;
         getCollisionPairs(col_model, links_fk, 0.05, link_collisions);
+        std::cout << "isStateValid: collisions: " << link_collisions.size() << std::endl;
         if (link_collisions.size() > 0) {
             return false;
         }
@@ -314,7 +314,7 @@ public:
 
 
 
-
+/*
                     // calculate forward kinematics for all links
                     for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
                         kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
@@ -334,6 +334,7 @@ public:
                     ros::spinOnce();
                     ros::Duration(1).sleep();
         return;
+*/
         //
         // ompl
         //
