@@ -172,24 +172,72 @@ public:
         return pcol;
     }
 
-    bool checkCollisionQ5(const Eigen::VectorXd &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model, const KinematicModel &kin_model) {
-        std::vector<CollisionInfo> link_collisions;
-        std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
-        // calculate forward kinematics for all links
-        for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-            kin_model.calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), x);
-        }
-        getCollisionPairs(col_model, links_fk, 0.05, link_collisions);
-        if (link_collisions.size() > 0) {
-            return true;
-        }
-
-        return false;
-    }
-
     void stateOmplToEigen(const ompl::base::State *s, Eigen::VectorXd &x, int ndof) {
         for (int q_idx = 0; q_idx < ndof; q_idx++) {
             x(q_idx) = s->as<ompl::base::RealVectorStateSpace::StateType >()->operator[](q_idx);
+        }
+    }
+
+    bool checkCollision(const boost::shared_ptr<self_collision::CollisionModel> &col_model, const std::vector<KDL::Frame > &links_fk) {
+        // self collision
+        for (self_collision::CollisionModel::CollisionPairs::const_iterator it = col_model->enabled_collisions.begin(); it != col_model->enabled_collisions.end(); it++) {
+            int link1_idx = it->first;
+            int link2_idx = it->second;
+            KDL::Frame T_B_L1 = links_fk[link1_idx];
+            KDL::Frame T_B_L2 = links_fk[link2_idx];
+
+            for (self_collision::Link::VecPtrCollision::const_iterator col1 = col_model->getLinkCollisionArray(link1_idx).begin(); col1 != col_model->getLinkCollisionArray(link1_idx).end(); col1++) {
+                for (self_collision::Link::VecPtrCollision::const_iterator col2 = col_model->getLinkCollisionArray(link2_idx).begin(); col2 != col_model->getLinkCollisionArray(link2_idx).end(); col2++) {
+                    double dist = 0.0;
+                    KDL::Vector p1_B, p2_B, n1_B, n2_B;
+                    KDL::Frame T_B_C1 = T_B_L1 * (*col1)->origin;
+                    KDL::Frame T_B_C2 = T_B_L2 * (*col2)->origin;
+
+                    dist = self_collision::CollisionModel::getDistance((*col1)->geometry, T_B_C1, (*col2)->geometry, T_B_C2, p1_B, p2_B, 0.01);
+                    if (dist < 0.0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    void getCollisionPairs(const boost::shared_ptr<self_collision::CollisionModel> &col_model, const std::vector<KDL::Frame > &links_fk,
+                            double activation_dist, std::vector<CollisionInfo> &link_collisions) {
+        // self collision
+        for (self_collision::CollisionModel::CollisionPairs::const_iterator it = col_model->enabled_collisions.begin(); it != col_model->enabled_collisions.end(); it++) {
+            int link1_idx = it->first;
+            int link2_idx = it->second;
+            KDL::Frame T_B_L1 = links_fk[link1_idx];
+            KDL::Frame T_B_L2 = links_fk[link2_idx];
+
+            for (self_collision::Link::VecPtrCollision::const_iterator col1 = col_model->getLinkCollisionArray(link1_idx).begin(); col1 != col_model->getLinkCollisionArray(link1_idx).end(); col1++) {
+                for (self_collision::Link::VecPtrCollision::const_iterator col2 = col_model->getLinkCollisionArray(link2_idx).begin(); col2 != col_model->getLinkCollisionArray(link2_idx).end(); col2++) {
+                    double dist = 0.0;
+                    KDL::Vector p1_B, p2_B, n1_B, n2_B;
+                    KDL::Frame T_B_C1 = T_B_L1 * (*col1)->origin;
+                    KDL::Frame T_B_C2 = T_B_L2 * (*col2)->origin;
+
+                    dist = self_collision::CollisionModel::getDistance((*col1)->geometry, T_B_C1, (*col2)->geometry, T_B_C2, p1_B, p2_B, activation_dist);
+
+//                    std::cout << col_model->getLinkName(link1_idx) << " " << col_model->getLinkName(link2_idx) << "   dist: " << dist << std::endl;
+                    if (dist < activation_dist) {
+                        CollisionInfo col_info;
+                        col_info.link1_idx = link1_idx;
+                        col_info.link2_idx = link2_idx;
+                        col_info.dist = dist;
+                        n1_B = (p2_B - p1_B) / dist;
+                        n2_B = -n1_B;
+                        col_info.n1_B = n1_B;
+                        col_info.n2_B = n2_B;
+                        col_info.p1_B = p1_B;
+                        col_info.p2_B = p2_B;
+                        link_collisions.push_back(col_info);
+                    }
+
+                }
+            }
         }
     }
 
@@ -204,9 +252,7 @@ public:
             kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), x);
         }
 
-        getCollisionPairs(col_model, links_fk, 0.05, link_collisions);
-        std::cout << "isStateValid: collisions: " << link_collisions.size() << std::endl;
-        if (link_collisions.size() > 0) {
+        if (checkCollision(col_model, links_fk)) {
             return false;
         }
 
@@ -312,29 +358,6 @@ public:
             max_trq[q_idx] = 10.0;
         }
 
-
-
-/*
-                    // calculate forward kinematics for all links
-                    for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                        kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
-                    }
-
-                    ros::Duration(1).sleep();
-
-                    for (int i = 0; i < 10; i++) {
-                        publishJointState(q, joint_names, ign_q, ign_joint_names);
-                        ros::spinOnce();
-                        ros::Duration(0.1).sleep();
-                    }
-                    int m_id = 0;
-                    m_id = publishRobotModelVis(m_id, col_model, links_fk);
-                    markers_pub_.publish();
-
-                    ros::spinOnce();
-                    ros::Duration(1).sleep();
-        return;
-*/
         //
         // ompl
         //
@@ -396,7 +419,6 @@ public:
                     stateOmplToEigen(s, x, ndof);
                     path2.push_back(x);
                 }
-
                 
                 for (double f = 0.0; f < 1.0; f += 0.01/path->length()) {
                     Eigen::VectorXd x(ndof);
@@ -411,6 +433,14 @@ public:
                     publishJointState(x, joint_names, ign_q, ign_joint_names);
                     int m_id = 0;
                     m_id = publishRobotModelVis(m_id, col_model, links_fk);
+
+                    std::vector<CollisionInfo> link_collisions;
+                    getCollisionPairs(col_model, links_fk, 0.2, link_collisions);
+                    for (std::vector<CollisionInfo>::const_iterator it = link_collisions.begin(); it != link_collisions.end(); it++) {
+                        m_id = markers_pub_.addVectorMarker(m_id, it->p1_B, it->p2_B, 1, 1, 1, 1, 0.01, "world");                        
+                    }
+                    markers_pub_.addEraseMarkers(m_id, m_id+100);
+
                     markers_pub_.publish();
 
                     ros::spinOnce();
@@ -419,7 +449,6 @@ public:
 
                 q = xe;
                 getchar();
-
             }
             else {
                 std::cout << "solution not found" << std::endl;
