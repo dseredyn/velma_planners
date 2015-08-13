@@ -36,10 +36,13 @@
 
 #include "params.inc"
 
-DynModelVelma::DynModelVelma() {
-    M_.resize(5,5);
-    invM_.resize(5,5);
-    tmpTau_.resize(5);
+DynModelVelma::DynModelVelma() :
+    Mp_(16, 16),
+    invMp_(16, 16)
+{
+    M_.resize(15,15);
+    invM_.resize(15,15);
+    tmpTau_.resize(15);
 }
 
 DynModelVelma::~DynModelVelma() {
@@ -109,8 +112,46 @@ void DynModelVelma::gaussjordan(const Eigen::MatrixXd &inMatrix, Eigen::MatrixXd
 }
 
 void DynModelVelma::computeM(const Eigen::VectorXd &q) {
-	inertia(M_, q);
-	gaussjordan(M_, invM_, 5);
+/*	inertia(Mp_, q);
+    M_(0,0) = Mp_(0,0);
+    for (int i=1; i<15; i++) {
+        M_(i,0) = Mp_(i+1,0);
+        M_(0,i) = Mp_(0,i+1);
+    }
+    for (int i=1; i<15; ++i) {
+        for (int j=1; j<15; ++j) {
+            M_(i,j) = Mp_(i+1,j+1);
+        }
+    }
+*/
+/*
+    inertia(invMp_, q);
+    invM_(0,0) = invMp_(0,0);
+    for (int i=1; i<15; i++) {
+        invM_(i,0) = invMp_(i+1,0);
+        invM_(0,i) = invMp_(0,i+1);
+    }
+    for (int i=1; i<15; ++i) {
+        for (int j=1; j<15; ++j) {
+            invM_(i,j) = invMp_(i+1,j+1);
+        }
+    }
+	gaussjordan(invM_, M_, 15);*/
+/*
+	gaussjordan(Mp_, invMp_, 16);
+    invM_(0,0) = invMp_(0,0);
+    for (int i=1; i<15; i++) {
+        invM_(i,0) = invMp_(i+1,0);
+        invM_(0,i) = invMp_(0,i+1);
+    }
+    for (int i=1; i<15; ++i) {
+        for (int j=1; j<15; ++j) {
+            invM_(i,j) = invMp_(i+1,j+1);
+        }
+    }
+*/
+    M_ = Eigen::MatrixXd::Identity(15, 15);
+	gaussjordan(M_, invM_, 15);
 }
 
 void DynModelVelma::accel(Eigen::VectorXd &QDD, const Eigen::VectorXd &q, const Eigen::VectorXd &dq, const Eigen::VectorXd &t){
@@ -125,9 +166,9 @@ void DynModelVelma::accel(Eigen::VectorXd &QDD, const Eigen::VectorXd &q, const 
  
 	/* fill temporary vector */
 //    tmpTau_ = C_ * dq;
-	for (iCol = 0; iCol < 5; iCol++){
+	for (iCol = 0; iCol < 15; iCol++){
 //		tmpTau_[iCol] = t[iCol] -  tmpTau_[iCol] - gravload[iCol][0] + friction[iCol][0];
-		tmpTau_[iCol] = t[iCol] - dq[iCol] * 0.1;
+		tmpTau_[iCol] = t[iCol] - dq[iCol] * 0.5;
 	}
 	/* compute acceleration */
     QDD = invM_ * tmpTau_;

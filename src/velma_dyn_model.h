@@ -48,6 +48,7 @@ protected:
     void gaussjordan(const Eigen::MatrixXd &inMatrix, Eigen::MatrixXd &outMatrix, int dim);
 
     Eigen::VectorXd tmpTau_;
+    Eigen::MatrixXd Mp_, invMp_;
 };
 
 #endif

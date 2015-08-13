@@ -202,7 +202,7 @@ public:
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
         col_array.push_back( self_collision::createCollisionCapsule(0.3, 1.3, KDL::Frame(KDL::Vector(1, 0, 1))) );
-        if (!col_model->addLink("env_link", "base", col_array)) {
+        if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
         }
@@ -252,7 +252,7 @@ public:
             saved_ddq[q_idx] = ddq[q_idx];
         }
 
-        std::string effector_name = "effector";
+        std::string effector_name = "right_HandPalmLink";
         int effector_idx = col_model->getLinkIndex(effector_name);
 
         //

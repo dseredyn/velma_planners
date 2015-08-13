@@ -71,13 +71,18 @@ public:
     ~TestDynamicModel() {
     }
 
-    void publishJointState(const Eigen::VectorXd &q, const std::vector<std::string > &joint_names) {
+    void publishJointState(const Eigen::VectorXd &q, const std::vector<std::string > &joint_names, const Eigen::VectorXd &ign_q, const std::vector<std::string > &ign_joint_names) {
         sensor_msgs::JointState js;
         js.header.stamp = ros::Time::now();
         int q_idx = 0;
         for (std::vector<std::string >::const_iterator it = joint_names.begin(); it != joint_names.end(); it++, q_idx++) {
             js.name.push_back(*it);
             js.position.push_back(q[q_idx]);
+        }
+        q_idx = 0;
+        for (std::vector<std::string >::const_iterator it = ign_joint_names.begin(); it != ign_joint_names.end(); it++, q_idx++) {
+            js.name.push_back(*it);
+            js.position.push_back(ign_q[q_idx]);
         }
         joint_state_pub_.publish(js);
     }
@@ -89,7 +94,7 @@ public:
         double qx, qy, qz, qw;
         T_B_F.M.GetQuaternion(q[0], q[1], q[2], q[3]);
         transform.setRotation(q);
-        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base", frame_id));
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", frame_id));
     }
 
     int publishRobotModelVis(int m_id, const boost::shared_ptr<self_collision::CollisionModel> &col_model, const std::vector<KDL::Frame > &T) {
@@ -102,11 +107,11 @@ public:
                 }
                 else if ((*it)->geometry->getType() == self_collision::Geometry::SPHERE) {
                     self_collision::Sphere *sphere = static_cast<self_collision::Sphere* >((*it)->geometry.get());
-                    m_id = markers_pub_.addSinglePointMarker(m_id, T_B_O.p, 0, 1, 0, 0.5, sphere->radius*2, "base");
+                    m_id = markers_pub_.addSinglePointMarker(m_id, T_B_O.p, 0, 1, 0, 0.5, sphere->radius*2, "world");
                 }
                 else if ((*it)->geometry->getType() == self_collision::Geometry::CAPSULE) {
                     self_collision::Capsule *capsule = static_cast<self_collision::Capsule* >((*it)->geometry.get());
-                    m_id = markers_pub_.addCapsule(m_id, T_B_O, capsule->length, capsule->radius, "base");
+                    m_id = markers_pub_.addCapsule(m_id, T_B_O, capsule->length, capsule->radius, "world");
                 }
             }
         }
@@ -135,8 +140,8 @@ public:
 
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
-        col_array.push_back( self_collision::createCollisionCapsule(0.2, 0.3, KDL::Frame(KDL::Rotation::RotX(90.0/180.0*PI), KDL::Vector(1, 0.5, 0))) );
-        if (!col_model->addLink("env_link", "base", col_array)) {
+        col_array.push_back( self_collision::createCollisionCapsule(0.3, 1.3, KDL::Frame(KDL::Vector(1, 0, 1))) );
+        if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
         }
@@ -170,13 +175,13 @@ public:
         ddq.resize( ndof );
         torque.resize( ndof );
         for (int q_idx = 0; q_idx < ndof; q_idx++) {
-            q[q_idx] = -0.1;
-            dq[q_idx] = 0.0;
+            q[q_idx] = 0.5;
+            dq[q_idx] = -1.0;
             ddq[q_idx] = 0.0;
             torque[q_idx] = 0.0;
         }
 
-        std::string effector_name = "effector";
+        std::string effector_name = "right_HandPalmLink";
         int effector_idx = col_model->getLinkIndex(effector_name);
 
         //
@@ -187,9 +192,6 @@ public:
         Eigen::VectorXd ign_q;
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
-
-        KinematicModel::Jacobian J_r_HAND;
-        J_r_HAND.resize(6, ndof);
 
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
 
@@ -202,9 +204,12 @@ public:
                 ROS_ERROR("ERROR: could not find joint with name %s", name_it->c_str() );
                 return;
             }
-            limit_range[q_idx] = 10.0/180.0*PI;
-            max_trq[q_idx] = 10.0;
+            limit_range[q_idx] = 15.0/180.0*PI;
+            max_trq[q_idx] = 30.0;
         }
+
+        KinematicModel::Jacobian J_r_HAND;
+        J_r_HAND.resize(6, ndof);
 
         //
         // Tasks declaration
@@ -221,47 +226,33 @@ public:
         ros::Rate loop_rate(100);
         while (ros::ok()) {
 
-            if (loop_counter > 500) {
-                r_HAND_target = KDL::Frame(KDL::Rotation::RotZ(randomUniform(-PI, PI)), KDL::Vector(randomUniform(0,2), randomUniform(-1,1), 0));
+            if (loop_counter > 1500) {
+                r_HAND_target = KDL::Frame(KDL::Rotation::RotZ(randomUniform(-PI, PI)) * KDL::Rotation::RotY(randomUniform(-PI, PI)) * KDL::Rotation::RotX(randomUniform(-PI, PI)), KDL::Vector(randomUniform(-1,1), randomUniform(-1,1), randomUniform(1.3,2)));
 
                 publishTransform(r_HAND_target, "effector_dest");
                 loop_counter = 0;
             }
             loop_counter += 1;
 
-            // publish markers and robot state with limited rate
-            ros::Duration time_elapsed = ros::Time::now() - last_time;
-            if (time_elapsed.toSec() > 0.05) {
-                publishJointState(q, joint_names);
-                int m_id = 0;
-                m_id = publishRobotModelVis(m_id, col_model, links_fk);
-                markers_pub_.publish();
-                ros::Time last_time = ros::Time::now();
-            }
-            ros::spinOnce();
-            loop_rate.sleep();
-
-            continue;
             // calculate forward kinematics for all links
             for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
                 kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
             }
             dyn_model->computeM(q);
 
-
-
             //
             // joint limit avoidance
             //
             Eigen::VectorXd torque_JLC(ndof);
             Eigen::MatrixXd N_JLC(ndof, ndof);
-            task_JLC.compute(q, dq, dyn_model->getM(), torque_JLC, N_JLC);
+            task_JLC.compute(q, dq, dyn_model->getInvM(), torque_JLC, N_JLC);
 
             //
             // collision constraints
             //
             std::vector<self_collision::CollisionInfo> link_collisions;
             self_collision::getCollisionPairs(col_model, links_fk, activation_dist, link_collisions);
+//            std::cout << (long int)link_collisions.size() << std::endl;
 
             {
                     int m_id = 1000;
@@ -273,7 +264,6 @@ public:
                     markers_pub_.addEraseMarkers(m_id, m_id+100);
 
             }
-
 
             Eigen::VectorXd torque_COL(ndof);
             for (int q_idx = 0; q_idx < ndof; q_idx++) {
@@ -293,10 +283,10 @@ public:
             KDL::Frame r_HAND_current = T_B_E;
 
             KDL::Twist diff = KDL::diff(r_HAND_current, r_HAND_target, 1.0);
-            Eigen::VectorXd r_HAND_diff(3);
-            r_HAND_diff[0] = diff[0];
-            r_HAND_diff[1] = diff[1];
-            r_HAND_diff[2] = diff[5];
+            Eigen::VectorXd r_HAND_diff(6);
+            for (int i=0; i<6; i++) {
+                r_HAND_diff[i] = diff[i];
+            }
 
             KDL::Twist diff_goal = KDL::diff(r_HAND_current, r_HAND_target, 1.0);
 
@@ -304,18 +294,21 @@ public:
             }
 
             Eigen::VectorXd Kc(6);
-            Kc[0] = 10.0;
-            Kc[1] = 10.0;
-            Kc[2] = 1.00;
+            for (int i=0; i<3; i++) {
+                Kc[i] = 2.0;
+                Kc[i+3] = 0.3;
+            }
             Eigen::VectorXd Dxi(6);
             for (int i=0; i<6; i++) {
-                Dxi[0] = 0.7;
+                Dxi[i] = 0.7;
+            }
 
             kin_model->getJacobian(J_r_HAND, effector_name, q);
 
             task_HAND.compute(r_HAND_diff, Kc, Dxi, J_r_HAND, dq, dyn_model->getInvM(), torque_HAND, N_HAND);
 
-            torque = torque_JLC + N_JLC.transpose() * (torque_COL + (N_COL.transpose() * (torque_HAND)));// + N_HAND.transpose() * torque_COL2)));
+            torque = torque_JLC + N_JLC.transpose() * (torque_COL + (N_COL.transpose() * (torque_HAND)));
+//            torque = torque_JLC;
 
 
             // simulate one step
@@ -329,14 +322,14 @@ public:
             // publish markers and robot state with limited rate
             ros::Duration time_elapsed = ros::Time::now() - last_time;
             if (time_elapsed.toSec() > 0.05) {
-                publishJointState(q, joint_names);
+                publishJointState(q, joint_names, ign_q, ign_joint_names);
                 int m_id = 0;
-                m_id = publishRobotModelVis(m_id, col_model, links_fk);
-                markers_pub_.publish();
-                ros::Time last_time = ros::Time::now();
+//                m_id = publishRobotModelVis(m_id, col_model, links_fk);
+//                markers_pub_.publish();
+                last_time = ros::Time::now();
             }
             ros::spinOnce();
-            loop_rate.sleep();
+//            loop_rate.sleep();
         }
     }
 };
