@@ -48,6 +48,10 @@ void MarkerPublisher::publish() {
     marker_array_.markers.clear();
 }
 
+void MarkerPublisher::clear() {
+    marker_array_.markers.clear();
+}
+
 int MarkerPublisher::addSinglePointMarker(int m_id, const KDL::Vector &pos, double r, double g, double b, double a, double size, const std::string &frame_id) {
     visualization_msgs::Marker marker;
     marker.header.frame_id = frame_id;
