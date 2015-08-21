@@ -16,10 +16,12 @@ include_directories(${catkin_INCLUDE_DIRS} ${Eigen_INCLUDE_DIRS} ${USE_OROCOS_IN
 add_executable(test_velma_ompl src/test_ompl.cpp)
 add_executable(test_velma_sim src/velma_sim.cpp src/velma_dyn_model.cpp)
 add_executable(test_velma_rrt src/velma_rrt.cpp src/velma_dyn_model.cpp)
+add_executable(test_velma_rrt2 src/velma_rrt2.cpp src/velma_dyn_model.cpp src/rrt.cpp)
 
 target_link_libraries(test_velma_ompl ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_sim ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_rrt ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
+target_link_libraries(test_velma_rrt2 ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 
 catkin_package(
     DEPENDS ompl eigen
