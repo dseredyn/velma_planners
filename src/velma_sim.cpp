@@ -45,11 +45,11 @@
 #include "velma_dyn_model.h"
 #include <collision_convex_model/collision_convex_model.h>
 #include "kin_model/kin_model.h"
-#include "marker_publisher.h"
-#include "task_col.h"
-#include "task_hand.h"
-#include "task_jlc.h"
-#include "random_uniform.h"
+#include "planer_utils/marker_publisher.h"
+#include "planer_utils/task_col.h"
+#include "planer_utils/task_hand.h"
+#include "planer_utils/task_jlc.h"
+#include "planer_utils/random_uniform.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;

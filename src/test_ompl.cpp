@@ -52,8 +52,8 @@
 
 #include <collision_convex_model/collision_convex_model.h>
 #include "kin_model/kin_model.h"
-#include "marker_publisher.h"
-#include "random_uniform.h"
+#include "planer_utils/marker_publisher.h"
+#include "planer_utils/random_uniform.h"
 
 class TestOmpl {
     ros::NodeHandle nh_;
