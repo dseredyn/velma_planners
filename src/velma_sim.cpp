@@ -51,6 +51,7 @@
 #include "planer_utils/task_jlc.h"
 #include "planer_utils/task_wcc.h"
 #include "planer_utils/random_uniform.h"
+#include "planer_utils/utilities.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -70,53 +71,6 @@ public:
     }
 
     ~TestDynamicModel() {
-    }
-
-    void publishJointState(const Eigen::VectorXd &q, const std::vector<std::string > &joint_names, const Eigen::VectorXd &ign_q, const std::vector<std::string > &ign_joint_names) {
-        sensor_msgs::JointState js;
-        js.header.stamp = ros::Time::now();
-        int q_idx = 0;
-        for (std::vector<std::string >::const_iterator it = joint_names.begin(); it != joint_names.end(); it++, q_idx++) {
-            js.name.push_back(*it);
-            js.position.push_back(q[q_idx]);
-        }
-        q_idx = 0;
-        for (std::vector<std::string >::const_iterator it = ign_joint_names.begin(); it != ign_joint_names.end(); it++, q_idx++) {
-            js.name.push_back(*it);
-            js.position.push_back(ign_q[q_idx]);
-        }
-        joint_state_pub_.publish(js);
-    }
-
-    void publishTransform(const KDL::Frame &T_B_F, const std::string &frame_id) {
-        tf::Transform transform;
-        transform.setOrigin( tf::Vector3(T_B_F.p.x(), T_B_F.p.y(), T_B_F.p.z()) );
-        tf::Quaternion q;
-        double qx, qy, qz, qw;
-        T_B_F.M.GetQuaternion(q[0], q[1], q[2], q[3]);
-        transform.setRotation(q);
-        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", frame_id));
-    }
-
-    int publishRobotModelVis(int m_id, const boost::shared_ptr<self_collision::CollisionModel> &col_model, const std::vector<KDL::Frame > &T) {
-        for (self_collision::CollisionModel::VecPtrLink::const_iterator l_it = col_model->getLinks().begin(); l_it != col_model->getLinks().end(); l_it++) {
-            KDL::Frame T_B_L = T[(*l_it)->index_];
-            for (self_collision::Link::VecPtrCollision::const_iterator it = (*l_it)->collision_array.begin(); it != (*l_it)->collision_array.end(); it++) {
-                KDL::Frame T_B_O = T_B_L * (*it)->origin;
-                if ((*it)->geometry->getType() == self_collision::Geometry::CONVEX) {
-                    // TODO
-                }
-                else if ((*it)->geometry->getType() == self_collision::Geometry::SPHERE) {
-                    self_collision::Sphere *sphere = static_cast<self_collision::Sphere* >((*it)->geometry.get());
-                    m_id = markers_pub_.addSinglePointMarker(m_id, T_B_O.p, 0, 1, 0, 0.5, sphere->radius*2, "world");
-                }
-                else if ((*it)->geometry->getType() == self_collision::Geometry::CAPSULE) {
-                    self_collision::Capsule *capsule = static_cast<self_collision::Capsule* >((*it)->geometry.get());
-                    m_id = markers_pub_.addCapsule(m_id, T_B_O, capsule->length, capsule->radius, "world");
-                }
-            }
-        }
-        return m_id;
     }
 
     void spin() {
@@ -215,8 +169,14 @@ public:
         //
         // Tasks declaration
         //
-        Task_JLC task_JLC(lower_limit, upper_limit, limit_range, max_trq);
-        Task_WCC task_WCC(ndof, 6, 7);
+        std::set<int > jlc_excluded_q_idx;
+        jlc_excluded_q_idx.insert(6);
+        jlc_excluded_q_idx.insert(7);
+        jlc_excluded_q_idx.insert(13);
+        jlc_excluded_q_idx.insert(14);
+        Task_JLC task_JLC(lower_limit, upper_limit, limit_range, max_trq, jlc_excluded_q_idx);
+        Task_WCC task_WCCr(ndof, 6, 7, false);
+        Task_WCC task_WCCl(ndof, 13, 14, true);
         double activation_dist = 0.05;
         Task_COL task_COL(ndof, activation_dist, 10.0, kin_model, col_model);
         Task_HAND task_HAND(ndof, 6);
@@ -225,13 +185,30 @@ public:
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
         int loop_counter = 10000;
-        ros::Rate loop_rate(100);
+        ros::Rate loop_rate(200);
+/*
+        while (ros::ok()) {
+            // calculate forward kinematics for all links
+            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
+            }
+
+            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
+            int m_id = 0;
+            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+            markers_pub_.publish();
+            ros::spinOnce();
+            loop_rate.sleep();
+        }
+
+        return;
+*/
         while (ros::ok()) {
 
             if (loop_counter > 1500) {
                 r_HAND_target = KDL::Frame(KDL::Rotation::RotZ(randomUniform(-PI, PI)) * KDL::Rotation::RotY(randomUniform(-PI, PI)) * KDL::Rotation::RotX(randomUniform(-PI, PI)), KDL::Vector(randomUniform(-1,1), randomUniform(-1,1), randomUniform(1.3,2)));
 
-                publishTransform(r_HAND_target, "effector_dest");
+                publishTransform(br, r_HAND_target, "effector_dest", "world");
                 loop_counter = 0;
             }
             loop_counter += 1;
@@ -252,10 +229,15 @@ public:
             //
             // wrist collision constraint
             //
-            Eigen::VectorXd torque_WCC(ndof);
-            Eigen::MatrixXd N_WCC(ndof, ndof);
-            task_WCC.compute(q, dq, dyn_model->getM(), dyn_model->getInvM(), torque_WCC, N_WCC, markers_pub_);
-            std::cout << torque_WCC.transpose() << std::endl;
+            Eigen::VectorXd torque_WCCr(ndof);
+            Eigen::MatrixXd N_WCCr(ndof, ndof);
+            task_WCCr.compute(q, dq, dyn_model->getM(), dyn_model->getInvM(), torque_WCCr, N_WCCr, &markers_pub_);
+
+            Eigen::VectorXd torque_WCCl(ndof);
+            Eigen::MatrixXd N_WCCl(ndof, ndof);
+            task_WCCl.compute(q, dq, dyn_model->getM(), dyn_model->getInvM(), torque_WCCl, N_WCCl, NULL);
+
+//            std::cout << torque_WCC.transpose() << std::endl;
 
             //
             // collision constraints
@@ -317,12 +299,13 @@ public:
 
             task_HAND.compute(r_HAND_diff, Kc, Dxi, J_r_HAND, dq, dyn_model->getInvM(), torque_HAND, N_HAND);
 
-            torque = torque_JLC + N_JLC.transpose() * (torque_WCC + N_WCC.transpose() * (torque_COL + (N_COL.transpose() * (torque_HAND))));
+//            torque = torque_JLC + N_JLC.transpose() * (torque_WCC + N_WCC.transpose() * (torque_COL + (N_COL.transpose() * (torque_HAND))));
+            torque = (torque_JLC + torque_WCCr + torque_WCCl) + (N_JLC * N_WCCr * N_WCCl).transpose() * (torque_COL + (N_COL.transpose() * (torque_HAND)));
 
             // simulate one step
             Eigen::VectorXd prev_ddq(ddq), prev_dq(dq);
             dyn_model->accel(ddq, q, dq, torque);
-            float time_d = 0.01;
+            float time_d = 0.005;
             for (int q_idx = 0; q_idx < ndof; q_idx++) {
                 dq[q_idx] += (prev_ddq[q_idx] + ddq[q_idx]) / 2.0 * time_d;
                 q[q_idx] += (prev_dq[q_idx] + dq[q_idx]) / 2.0 * time_d;
@@ -331,11 +314,11 @@ public:
             // publish markers and robot state with limited rate
             ros::Duration time_elapsed = ros::Time::now() - last_time;
             if (time_elapsed.toSec() > 0.05) {
-                publishJointState(q, joint_names, ign_q, ign_joint_names);
+                publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
                 int m_id = 0;
-//                m_id = publishRobotModelVis(m_id, col_model, links_fk);
-//                markers_pub_.publish();
-                markers_pub_.clear();
+                m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+                markers_pub_.publish();
+//                markers_pub_.clear();
                 last_time = ros::Time::now();
             }
             ros::spinOnce();

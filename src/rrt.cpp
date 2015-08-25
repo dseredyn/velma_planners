@@ -271,7 +271,7 @@
                         q_new_idx++;
                         V_[q_new_idx] = state_new;
                         E_[q_new_idx] = x_nearest_idx;
-                        m_id = markers_pub.addVectorMarker(q_new_idx, x_nearest.p, T_B_E.p, 0, 0.7, 0, 0.5, 0.01, "base");
+                        m_id = markers_pub.addVectorMarker(q_new_idx, x_nearest.p, T_B_E.p, 0, 0.7, 0, 0.5, 0.01, "world");
 
                         KDL::Twist goal_diff( KDL::diff(T_B_E, x_goal, 1.0) );
                         if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {

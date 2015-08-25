@@ -347,7 +347,7 @@ public:
         // loop variables
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
-        ros::Rate loop_rate(500);
+        ros::Rate loop_rate(100);
         std::list<Eigen::VectorXd > target_path;
 
         KDL::Twist diff_target;
@@ -376,6 +376,7 @@ public:
             for (std::list<KDL::Frame >::const_iterator it = path_x.begin(); it != path_x.end(); it++) {
                 sim->setTarget( (*it) );
                 KDL::Twist diff_target = KDL::diff( T_B_E, (*it), 1.0);
+                getchar();
 
                 for (int loop_counter = 0; loop_counter < 3000; loop_counter++) {
                     Eigen::VectorXd q(ndof), dq(ndof), ddq(ndof);
@@ -386,6 +387,7 @@ public:
 
                     KDL::Twist goal_diff( KDL::diff(r_HAND_current, (*it), 1.0) );
                     if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
+                        std::cout << "reached" << std::endl;
                         break;
                     }
                     sim->oneStep();
@@ -396,13 +398,16 @@ public:
                         kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
                     }
                     publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
-                    int m_id = 0;
-                    m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+                    int m_id = 1000;
+//                    m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
                     markers_pub_.publish();
                     ros::spinOnce();
                     loop_rate.sleep();
                 }
+                std::cout << "loop end" << std::endl;
             }
+            std::cout << "path end" << std::endl;
+
 //            sim->setState(saved_q, saved_dq, saved_ddq);
 
             getchar();
