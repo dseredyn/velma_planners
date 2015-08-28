@@ -65,6 +65,7 @@
 #include "planer_utils/random_uniform.h"
 #include "planer_utils/utilities.h"
 #include "planer_utils/simulator.h"
+#include "planer_utils/velma_q5q6_collision.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -258,9 +259,15 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         }
     }
 
-    bool isStateValid(const ompl::base::State *s, const boost::shared_ptr<self_collision::CollisionModel > &col_model, const boost::shared_ptr<KinematicModel > &kin_model, int ndof) {
+    bool isStateValid(const ompl::base::State *s, const boost::shared_ptr<self_collision::CollisionModel > &col_model, const boost::shared_ptr<KinematicModel > &kin_model,
+                        int ndof, const VelmaQ5Q6CollisionChecker &wcc1, const VelmaQ5Q6CollisionChecker &wcc2) {
         Eigen::VectorXd x(ndof);
         stateOmplToEigen(s, x, ndof);
+
+        // check collision in wrists
+        if (wcc1.inCollision(x) || wcc2.inCollision(x)) {
+            return false;
+        }
 
         std::vector<self_collision::CollisionInfo> link_collisions;
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
@@ -327,6 +334,9 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             return;
         }
         col_model->generateCollisionPairs();
+
+        VelmaQ5Q6CollisionChecker wrist_cc_r(6, 7, 0.2, false);
+        VelmaQ5Q6CollisionChecker wrist_cc_l(13, 14, 0.2, true);
 
         //
         // robot state
@@ -476,8 +486,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         space->as<ompl::base::RealVectorStateSpace>()->setBounds(bounds);
 
         ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
-        si->setStateValidityChecker( boost::bind(&TestDynamicModel::isStateValid, this, _1, col_model, kin_model, ndof) );
-        si->setStateValidityCheckingResolution(0.03);
+        si->setStateValidityChecker( boost::bind(&TestDynamicModel::isStateValid, this, _1, col_model, kin_model, ndof, wrist_cc_r, wrist_cc_l) );
+        si->setStateValidityCheckingResolution(1.0/180.0*PI);
         si->setup();
 
 //        std::string mode = "random_dest";
@@ -607,13 +617,13 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                         pdef->clearStartStates();
                         pdef->setStartAndGoalStates(start, goal);
 
-            //            ompl::base::PlannerPtr planner(new ompl::geometric::LBTRRT(si));
-                        ompl::base::PlannerPtr planner(new ompl::geometric::RRTstar(si));
-            //            ompl::base::PlannerPtr planner(new ompl::geometric::RRTConnect(si));
+                        ompl::base::PlannerPtr planner(new ompl::geometric::LBTRRT(si));
+//                        ompl::base::PlannerPtr planner(new ompl::geometric::RRTstar(si));
+//                        ompl::base::PlannerPtr planner(new ompl::geometric::RRTConnect(si));
                         planner->setProblemDefinition(pdef);
                         planner->setup();
 
-                        ompl::base::PlannerStatus status = planner->solve(2.0);
+                        ompl::base::PlannerStatus status = planner->solve(5.0);
 
                         if (status) {
                             std::cout << "rrt planner ok" << std::endl;

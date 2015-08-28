@@ -455,6 +455,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 //        std::string mode = "marker_dest";
         std::string mode = "random_start";
 
+        ros::Duration(1.0).sleep();
+
         bool collision_in_prev_step = false;
         while (ros::ok()) {
 
@@ -475,7 +477,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                 sim->setTarget(r_HAND_target);
             }
             else if (mode == "random_start") {
-                if (loop_counter > 1500*10) {
+                if (loop_counter > 1500*8) {
                     while (true) {
                         generatePossiblePose(r_HAND_target, q, ndof, effector_name, col_model, kin_model);
                         sim->setState(q, dq, ddq);
@@ -493,7 +495,15 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
             publishTransform(br, r_HAND_target, "effector_dest", "world");
 
+            const double q_tab[] = {0.932977, 2.23176, -0.444369, 1.51863, -0.149273, 2.02303, -0.0241965, 0.556891, 2.08885, -1.81702, 1.55818, 0.30735, 0.192247, 1.24464, -0.572893};
+            for (int q_idx = 0; q_idx < ndof; q_idx++) {
+                q(q_idx) = q_tab[q_idx];
+            }
+            sim->setState(q, dq, ddq);
 
+            std::cout << "*" << std::endl;
+            std::cout << "*" << std::endl;
+            std::cout << "*" << std::endl;
             sim->oneStep(&markers_pub_, 3000);
             if (sim->inCollision() && !collision_in_prev_step) {
                 collision_in_prev_step = true;
@@ -505,6 +515,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
 
             sim->getState(q, dq, ddq);
+            std::cout << "q: " << q.transpose() << std::endl;
 
             // publish markers and robot state with limited rate
             ros::Duration time_elapsed = ros::Time::now() - last_time;
@@ -525,6 +536,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
             ros::spinOnce();
             loop_rate.sleep();
+            ros::Duration(1.0).sleep();
+            return;
         }
     }
 };
