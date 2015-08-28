@@ -72,10 +72,14 @@
         return false;
     }
 
-    int RRT::nearest(const KDL::Frame &x) const {
+    int RRT::nearest(const KDL::Frame &x, bool to_goal) const {
         double min_dist = -1.0;
         int min_idx = -1;
         for (std::map<int, RRTState >::const_iterator v_it = V_.begin(); v_it != V_.end(); v_it++) {
+            if (to_goal && v_it->second.ignore_to_goal_) {
+                continue;
+            }
+
             KDL::Twist diff( KDL::diff(v_it->second.T_B_E_, x, 1.0) );
             double dist = diff.vel.Norm() + diff.rot.Norm();
             if (min_idx < 0 || dist < min_dist) {
@@ -104,84 +108,50 @@
 
         x = KDL::addDelta(x_from, diff, 1.0);
     }
-/*
-    bool RRT::collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out) const {
 
-        Eigen::VectorXd dq(ndof_), ddq(ndof_);
-        for (int q_idx = 0; q_idx < ndof_; q_idx++) {
-            dq(q_idx) = 0.0;
-            ddq(q_idx) = 0.0;
-        }
-        sim_->setTarget(x_to);
-        sim_->setState(q_from, dq, ddq);
-        KDL::Twist diff_target = KDL::diff(x_from, x_to, 1.0);
-        if (try_idx == 1) {
-            double angle = diff_target.rot.Norm();
-            diff_target.rot = (angle - 360.0/180.0*3.141592653589793) * diff_target.rot / angle;
-        }
-        else if (try_idx == 2) {
-            double angle = diff_target.rot.Norm();
-            diff_target.rot = (angle - 2.0*360.0/180.0*3.141592653589793) * diff_target.rot / angle;
-        }
+    bool RRT::collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out,
+                            std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const {
+        path_x->clear();
+        path_q->clear();
 
-        for (int loop_counter = 0; loop_counter < 1500; loop_counter++) {
-            double f_path = static_cast<double >(loop_counter)/800.0;
-            if (f_path > 1.0) {
-                f_path = 1.0;
-            }
-            KDL::Vector pt;
-            pt = x_to.p * f_path + x_from.p * (1.0-f_path);
-
-            KDL::Rotation target_rot = KDL::addDelta(x_from, diff_target, f_path).M;
-
-            Eigen::VectorXd q(ndof_), dq(ndof_), ddq(ndof_);
-            sim_->getState(q, dq, ddq);
-
-            KDL::Frame r_HAND_current;
-            kin_model_->calculateFk(r_HAND_current, effector_name_, q);
-
-            KDL::Twist goal_diff( KDL::diff(r_HAND_current, x_to, 1.0) );
-            if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
-                q_to = q;
-                x_to_out = r_HAND_current;
-                return true;
-            }
-
-            KDL::Frame target_pos(target_rot, pt);
-            KDL::Twist diff = KDL::diff(r_HAND_current, target_pos, 1.0);
-
-            sim_->oneStep(diff);
-        }
-        return false;
-    }
-*/
-
-    bool RRT::collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out) const {
-
-        Eigen::VectorXd dq(ndof_), ddq(ndof_);
-        for (int q_idx = 0; q_idx < ndof_; q_idx++) {
-            dq(q_idx) = 0.0;
-            ddq(q_idx) = 0.0;
-        }
+        Eigen::VectorXd q(ndof_), dq(ndof_), ddq(ndof_);
+        dq.setZero();
+        ddq.setZero();
         sim_->setTarget(x_to);
         sim_->setState(q_from, dq, ddq);
         KDL::Twist diff_target = KDL::diff(x_from, x_to, 1.0);
 
         for (int loop_counter = 0; loop_counter < 3000; loop_counter++) {
-            Eigen::VectorXd q(ndof_), dq(ndof_), ddq(ndof_);
+//            Eigen::VectorXd q(ndof_), dq(ndof_), ddq(ndof_);
             sim_->getState(q, dq, ddq);
 
             KDL::Frame r_HAND_current;
             kin_model_->calculateFk(r_HAND_current, effector_name_, q);
 
+            KDL::Twist prev_diff;
+            if (path_x->empty()) {
+                prev_diff = KDL::diff(x_from, r_HAND_current, 1.0);
+            }
+            else {
+                prev_diff = KDL::diff(path_x->back(), r_HAND_current, 1.0);
+            }
+
+            if (prev_diff.vel.Norm() > 0.1 || prev_diff.rot.Norm() > 30.0/180.0*3.1415) {
+                path_x->push_back(r_HAND_current);
+                path_q->push_back(q);
+            }
+
             KDL::Twist goal_diff( KDL::diff(r_HAND_current, x_to, 1.0) );
-            if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
+            if (goal_diff.vel.Norm() < 0.01 && goal_diff.rot.Norm() < 5.0/180.0*3.1415) {
                 q_to = q;
                 x_to_out = r_HAND_current;
                 return true;
             }
 
             sim_->oneStep();
+            if (sim_->inCollision()) {
+                return false;
+            }
         }
         return false;
     }
@@ -218,23 +188,27 @@
         }
     }
 
-    void RRT::plan(const Eigen::VectorXd &start, const KDL::Frame &x_goal, double goal_tolerance, std::list<KDL::Frame > &path_x, std::list<Eigen::VectorXd > &path_q, MarkerPublisher &markers_pub) {
+    void RRT::plan(const Eigen::VectorXd &q_start, const KDL::Frame &x_goal, double goal_tolerance, std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q, MarkerPublisher &markers_pub) {
         V_.clear();
         E_.clear();
-        path_x.clear();
-        path_q.clear();
+        if (path_x != NULL) {
+            path_x->clear();
+        }
+        if (path_q != NULL) {
+            path_q->clear();
+        }
 
         int q_new_idx = 0;
 
         RRTState state_start;
-        kin_model_->calculateFk(state_start.T_B_E_, effector_name_, start);
-        state_start.q_ = start;
+        kin_model_->calculateFk(state_start.T_B_E_, effector_name_, q_start);
+        state_start.q_ = q_start;
         V_[0] = state_start;
 
         bool goal_found = false;
 
         int m_id = 0;
-        for (int step = 0; step < 1200; step++) {
+        for (int step = 0; step < 100; step++) {
             bool sample_goal = randomUniform(0,1) < 0.05;
             KDL::Frame x_rand;
 
@@ -249,12 +223,21 @@
             }
 
             // get the closest pose
-            int x_nearest_idx = nearest(x_rand);
-            RRTState state_nearest( V_.find(x_nearest_idx)->second );
-            const KDL::Frame &x_nearest = state_nearest.T_B_E_;
+            int x_nearest_idx = nearest(x_rand, sample_goal);
+            if (x_nearest_idx < 0) {
+                continue;
+            }
+            RRTState &state_nearest( V_.find(x_nearest_idx)->second );
+            KDL::Frame x_nearest = state_nearest.T_B_E_;
             KDL::Frame x_new;
             // get the new pose
             steer(x_nearest, x_rand, 2.0, 170.0/180.0*3.1415, x_new);
+
+            bool is_goal_sample = false;
+            KDL::Twist goal_diff( KDL::diff(x_new, x_goal, 1.0) );
+            if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
+                is_goal_sample = true;
+            }
 
 //            std::cout << x_nearest.p[0] << " " << x_nearest.p[1] << " " << x_nearest.p[2] << std::endl;
 //            std::cout << x_new.p[0] << " " << x_new.p[1] << " " << x_new.p[2] << std::endl;
@@ -262,27 +245,81 @@
             Eigen::VectorXd q_new(ndof_);
             bool added_new = false;
             KDL::Frame T_B_E;
-            if (collisionFree(state_nearest.q_, x_nearest, x_new, 0, q_new, T_B_E)) {
+            std::list<KDL::Frame > sub_path_x;
+            std::list<Eigen::VectorXd > sub_path_q;
+            bool col_free = collisionFree(state_nearest.q_, x_nearest, x_new, 0, q_new, T_B_E, &sub_path_x, &sub_path_q);
+                        std::list<KDL::Frame >::const_iterator x_it;
+                        std::list<Eigen::VectorXd >::const_iterator q_it;
+                        for (x_it = sub_path_x.begin(), q_it = sub_path_q.begin(); x_it != sub_path_x.end(); x_it++, q_it++) {
+                            added_new = true;
+                            RRTState state_new;
+                            state_new.T_B_E_ = (*x_it);
+                            state_new.q_ = (*q_it);
+                            state_new.ignore_to_goal_ = false;
+                            q_new_idx++;
+                            V_[q_new_idx] = state_new;
+                            E_[q_new_idx] = x_nearest_idx;
+                            m_id = markers_pub.addVectorMarker(q_new_idx, x_nearest.p, state_new.T_B_E_.p, 0, 0.7, 0, 0.5, 0.01, "world");
+                            x_nearest_idx = q_new_idx;
+                            x_nearest = state_new.T_B_E_;
+                        }
+
+            if (col_free) {
 
                         added_new = true;
                         RRTState state_new;
-                        state_new.T_B_E_ = T_B_E;//x_new;
+                        state_new.T_B_E_ = T_B_E;
                         state_new.q_ = q_new;
+                        state_new.ignore_to_goal_ = false;
                         q_new_idx++;
                         V_[q_new_idx] = state_new;
                         E_[q_new_idx] = x_nearest_idx;
                         m_id = markers_pub.addVectorMarker(q_new_idx, x_nearest.p, T_B_E.p, 0, 0.7, 0, 0.5, 0.01, "world");
 
                         KDL::Twist goal_diff( KDL::diff(T_B_E, x_goal, 1.0) );
-                        if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
+                        if (goal_diff.vel.Norm() < 0.06 && goal_diff.rot.Norm() < 20.0/180.0*3.1415) {
                             goal_found = true;
-                            std::cout << "goal found" << std::endl;
+//                            std::cout << "goal found" << std::endl;
                         }
             }
             else {
 
-                KDL::Twist goal_diff( KDL::diff(x_new, x_goal, 1.0) );
-                if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
+                // this node was the goal node
+                if (is_goal_sample && x_nearest_idx > 0) {
+                    std::set<int> nodes_to_remove;
+                    nodes_to_remove.insert(x_nearest_idx);
+                    int removed_nodes_count = 0;
+
+                    while (nodes_to_remove.size() > 0) {
+                            std::set<int> orphan_nodes;
+                            for (std::map<int, int >::const_iterator e_it = E_.begin(); e_it != E_.end(); e_it++) {
+                                if (nodes_to_remove.find(e_it->second) != nodes_to_remove.end()) {
+                                    orphan_nodes.insert(e_it->first);
+                                }
+                            }
+
+                            for (std::set<int>::const_iterator it = nodes_to_remove.begin(); it != nodes_to_remove.end(); it++) {
+                                V_.erase( (*it) );
+                                E_.erase( (*it) );
+                                markers_pub.addEraseMarkers( (*it), (*it)+1);
+                                removed_nodes_count++;
+                            }
+                            nodes_to_remove = orphan_nodes;
+                    }
+//                    std::cout << "removed nodes: " << removed_nodes_count << std::endl;
+                }
+
+/*                if (is_goal_sample) {
+                    // mark the nearest node
+                    state_nearest.ignore_to_goal_ = true;
+                    std::map<int, int >::const_iterator e_it = E_.find(x_nearest_idx);
+                    if (e_it != E_.end()) {
+                        m_id = markers_pub.addVectorMarker(x_nearest_idx, V_[e_it->second].T_B_E_.p, x_nearest.p, 1, 0, 0, 0.5, 0.01, "world");
+                    }
+                }
+*/
+/*
+                if (is_goal_sample) {
                     std::list<int> nodes_to_remove_list;
                     getPath(x_nearest_idx, nodes_to_remove_list);
                     if (nodes_to_remove_list.size() > 1) {
@@ -313,17 +350,11 @@
                         std::cout << "removed nodes: " << removed_nodes_count << std::endl;
                     }
                 }
-
-                if (sample_goal) {
-                    // remove the nearest node to the goal
-//                    V_.erase(x_nearest_idx);
-//                    E_.erase(x_nearest_idx);
-//                    markers_pub.addEraseMarkers(x_nearest_idx, x_nearest_idx+1);
-                }
+//*/
             }
 
             if (added_new) {
-                std::cout << "step " << step << "  nearest_idx " << x_nearest_idx << std::endl;
+//                std::cout << "step " << step << "  nearest_idx " << x_nearest_idx << std::endl;
             }
 
             markers_pub.publish();
@@ -333,69 +364,55 @@
                 break;
             }
         }
-/*
-        double min_cost = 0.0;
-        int min_goal_idx = -1;
-        for (std::map<int, Eigen::VectorXd >::const_iterator v_it = V_.begin(); v_it != V_.end(); v_it++) {
-            double dist = (v_it->second - x_goal).norm();
-            double c = cost(v_it->first);
-            if (dist < goal_tolerance && (min_goal_idx < 0 || min_cost > c)) {
-                min_cost = c;
-                min_goal_idx = v_it->first;
-            }
-        }
-
-        if (min_goal_idx == -1) {
-            // path not found
-            return;
-        }
-*/
 
         if (goal_found) {
-            
             std::list<int > idx_path;
             getPath(q_new_idx, idx_path);
-            for (std::list<int >::const_iterator p_it = idx_path.begin(); p_it != idx_path.end(); p_it++) {
-                const RRTState &current = V_.find(*p_it)->second;
-                path_q.push_back(current.q_);
-                path_x.push_back(current.T_B_E_);
+            if (path_x != NULL) {
+                for (std::list<int >::const_iterator p_it = idx_path.begin(); p_it != idx_path.end(); p_it++) {
+                    const RRTState &current = V_.find(*p_it)->second;
+                    path_x->push_back(current.T_B_E_);
+                }
+            }
+            if (path_q != NULL) {
+                // execute the planned path and save the joint trajectory
+                Eigen::VectorXd dq( Eigen::VectorXd::Zero(ndof_) );
+                Eigen::VectorXd ddq( Eigen::VectorXd::Zero(ndof_) );
+                sim_->setState(q_start, dq, ddq);
+                for (std::list<int >::const_iterator p_it = idx_path.begin(); p_it != idx_path.end(); p_it++) {
+                    const RRTState &current = V_.find(*p_it)->second;
+                    sim_->setTarget( current.T_B_E_ );
+                    for (int loop_counter = 0; loop_counter < 3000; loop_counter++) {
+                        Eigen::VectorXd q(ndof_), dq(ndof_), ddq(ndof_);
+                        sim_->getState(q, dq, ddq);
+
+                        bool added_point = false;
+                        if (path_q->empty()) {
+                            added_point = true;
+                            path_q->push_back(q);
+                        }
+                        else {
+                            if ( (path_q->back() - q).norm() > 10.0/180.0*3.1415 ) {
+                                added_point = true;
+                                path_q->push_back(q);
+                            }
+                        }
+
+                        KDL::Frame r_HAND_current;
+                        kin_model_->calculateFk(r_HAND_current, effector_name_, q);
+
+                        KDL::Twist goal_diff( KDL::diff(r_HAND_current, current.T_B_E_, 1.0) );
+                        if (goal_diff.vel.Norm() < 0.03 && goal_diff.rot.Norm() < 10.0/180.0*3.1415) {
+                            if (!added_point) {
+                                path_q->push_back(q);
+                            }
+                            break;
+                        }
+                        sim_->oneStep();
+                    }
+                }
             }
         }
-
-/*
-        int q_vec_idx = V_[q_new_idx].q_vec_.size()-1;
-        std::list<int > idx_path;
-        getPath(q_new_idx, idx_path);
-        for (std::list<int >::const_reverse_iterator p_it = idx_path.rbegin(); p_it != idx_path.rend(); p_it++) {
-//            std::list<int >::const_reverse_iterator p_it2 = p_it;
-//            p_it2++;
-            const RRTState &current = V_.find(*p_it)->second;
-
-//            if (p_it2 == idx_path.rend()) {
-//                path_q.push_back(current.q_vec_[q_vec_idx]->second);
-//            }
-//            else {
-            path_q.push_back(current.q_vec_[q_vec_idx].second);
-            q_vec_idx = current.q_vec_[q_vec_idx].first;
-//            }
-        }
-
-        std::reverse(path_q.begin(), path_q.end());
-*/
-/*
-        for (std::list<int >::const_iterator p_it = idx_path.begin(); p_it != idx_path.end(); p_it++) {
-            const RRTState &current = V_.find(*p_it)->second;
-            if (p_it == idx_path.begin()) {
-                path_q.push_back(current.q_vec_[0]);
-            }
-            else {
-                std::list<int >::const_iterator p_it_prev = p_it;
-                p_it_prev--;
-                const RRTState &prev = V_.find(*p_it_prev)->second;
-                path_q.push_back(current.q_vec_[0]);
-            }
-        }
-*/
     }
 
     int RRT::addTreeMarker(MarkerPublisher &markers_pub, int m_id) const {

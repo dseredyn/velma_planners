@@ -42,7 +42,7 @@ class RRTState {
 public:
     KDL::Frame T_B_E_;
     Eigen::VectorXd q_;
-//    std::vector<std::pair<int, Eigen::VectorXd > > q_vec_;
+    bool ignore_to_goal_;
 };
 
 class RRT {
@@ -62,11 +62,12 @@ public:
 
     bool sampleFree(KDL::Frame &sample_free) const;
 
-    int nearest(const KDL::Frame &x) const;
+    int nearest(const KDL::Frame &x, bool to_goal) const;
 
     void steer(const KDL::Frame &x_from, const KDL::Frame &x_to, double steer_dist_lin, double steer_dist_rot, KDL::Frame &x) const;
 
-    bool collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out) const;
+    bool collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out,
+                        std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const;
 
     double costLine(const KDL::Frame &x1, const KDL::Frame &x2) const;
 
@@ -76,7 +77,7 @@ public:
 
     void getPath(int q_idx, std::list<int > &path) const;
 
-    void plan(const Eigen::VectorXd &start, const KDL::Frame &x_goal, double goal_tolerance, std::list<KDL::Frame > &path_x, std::list<Eigen::VectorXd > &path_q, MarkerPublisher &markers_pub);
+    void plan(const Eigen::VectorXd &q_start, const KDL::Frame &x_goal, double goal_tolerance, std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q, MarkerPublisher &markers_pub);
 
     int addTreeMarker(MarkerPublisher &markers_pub, int m_id) const;
 

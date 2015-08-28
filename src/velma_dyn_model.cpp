@@ -136,7 +136,8 @@ void DynModelVelma::computeM(const Eigen::VectorXd &q) {
             invM_(i,j) = invMp_(i+1,j+1);
         }
     }
-	gaussjordan(invM_, M_, 15);*/
+	gaussjordan(invM_, M_, 15);
+//*/
 /*
 	gaussjordan(Mp_, invMp_, 16);
     invM_(0,0) = invMp_(0,0);
