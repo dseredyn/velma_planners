@@ -398,7 +398,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         max_q(6) = max_q(13) = 50.0/180.0*PI;   // arm_5_joint
         max_q(7) = max_q(14) = 50.0/180.0*PI;   // arm_6_joint
 
-        boost::shared_ptr<DynamicsSimulatorHandPose> sim( new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, max_q) );
+        boost::shared_ptr<DynamicsSimulatorHandPose> sim( new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, 2.0*max_q) );
 
         // loop variables
         ros::Time last_time = ros::Time::now();
@@ -538,6 +538,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 
                     sim->oneStep();//&markers_pub_, 3000);
                     if (sim->inCollision()) {
+                        std::cout << "collision" << std::endl;
                         break;
                     }
 
@@ -600,6 +601,13 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                             goal[q_idx] = q(q_idx);
                         }
 
+                        if (!isStateValid(start.get(), col_model, kin_model, ndof, wrist_cc_r, wrist_cc_l)) {
+                            std::cout << "start state is invalid" << std::endl;
+                        }
+                        if (!isStateValid(goal.get(), col_model, kin_model, ndof, wrist_cc_r, wrist_cc_l)) {
+                            std::cout << "goal state is invalid" << std::endl;
+                        }
+
                         // enable arm joints only
                         for (int q_idx = 0; q_idx < ndof; q_idx++) {
                             if (excluded_q_ids.find(q_idx) == excluded_q_ids.end()) {
@@ -617,13 +625,13 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                         pdef->clearStartStates();
                         pdef->setStartAndGoalStates(start, goal);
 
-                        ompl::base::PlannerPtr planner(new ompl::geometric::LBTRRT(si));
+//                        ompl::base::PlannerPtr planner(new ompl::geometric::LBTRRT(si));
 //                        ompl::base::PlannerPtr planner(new ompl::geometric::RRTstar(si));
-//                        ompl::base::PlannerPtr planner(new ompl::geometric::RRTConnect(si));
+                        ompl::base::PlannerPtr planner(new ompl::geometric::RRTConnect(si));
                         planner->setProblemDefinition(pdef);
                         planner->setup();
 
-                        ompl::base::PlannerStatus status = planner->solve(5.0);
+                        ompl::base::PlannerStatus status = planner->solve(10.0);
 
                         if (status) {
                             std::cout << "rrt planner ok" << std::endl;

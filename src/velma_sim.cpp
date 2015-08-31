@@ -457,11 +457,46 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 
         ros::Duration(1.0).sleep();
 
+/*
+        // TEST
+        int m_id = 5000;
+        VelmaQ5Q6CollisionChecker cc(0, 1, 10.0/180.0*3.1415, false);
+        for (double x = -3.0; x < 3.0; x+=0.1) {
+            for (double y = -3.0; y < 3.0; y+=0.1) {
+                Eigen::VectorXd q(2);
+                q(0) = x;
+                q(1) = y;
+                if (cc.inCollision(q)) {
+                    m_id = markers_pub_.addSinglePointMarker(m_id, KDL::Vector(x, y, 0), 1, 0, 0, 1, 0.03, "world");
+                }
+                else {
+                    m_id = markers_pub_.addSinglePointMarker(m_id, KDL::Vector(x, y, 0), 0, 1, 0, 1, 0.03, "world");
+                }
+            }
+        }
+        {
+        Eigen::VectorXd q(2);
+        q(0) = -0.67725;
+        q(1) = 1.64441;
+                if (cc.inCollision(q)) {
+                    m_id = markers_pub_.addSinglePointMarker(m_id, KDL::Vector(q(0), q(1), 0), 1, 0, 0, 1, 0.03, "world");
+                }
+                else {
+                    m_id = markers_pub_.addSinglePointMarker(m_id, KDL::Vector(q(0), q(1), 0), 0, 1, 0, 1, 0.03, "world");
+                }
+        }
+        ros::Duration(1.0).sleep();
+        markers_pub_.publish();
+        ros::spinOnce();
+
+        return;
+//*/
+
         bool collision_in_prev_step = false;
         while (ros::ok()) {
 
             if (mode == "random_dest") {
-                if (loop_counter > 1500*10) {
+                if (loop_counter > 1500*5) {
                     Eigen::VectorXd q_tmp(ndof);
                     generatePossiblePose(r_HAND_target, q_tmp, ndof, effector_name, col_model, kin_model);
 
@@ -477,7 +512,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                 sim->setTarget(r_HAND_target);
             }
             else if (mode == "random_start") {
-                if (loop_counter > 1500*8) {
+                if (loop_counter > 1500*5) {
                     while (true) {
                         generatePossiblePose(r_HAND_target, q, ndof, effector_name, col_model, kin_model);
                         sim->setState(q, dq, ddq);
@@ -494,7 +529,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                 loop_counter += 1;
             }
             publishTransform(br, r_HAND_target, "effector_dest", "world");
-
+/*
             const double q_tab[] = {0.932977, 2.23176, -0.444369, 1.51863, -0.149273, 2.02303, -0.0241965, 0.556891, 2.08885, -1.81702, 1.55818, 0.30735, 0.192247, 1.24464, -0.572893};
             for (int q_idx = 0; q_idx < ndof; q_idx++) {
                 q(q_idx) = q_tab[q_idx];
@@ -504,6 +539,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             std::cout << "*" << std::endl;
             std::cout << "*" << std::endl;
             std::cout << "*" << std::endl;
+*/
             sim->oneStep(&markers_pub_, 3000);
             if (sim->inCollision() && !collision_in_prev_step) {
                 collision_in_prev_step = true;
@@ -515,7 +551,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
 
             sim->getState(q, dq, ddq);
-            std::cout << "q: " << q.transpose() << std::endl;
+//            std::cout << "q: " << q.transpose() << std::endl;
 
             // publish markers and robot state with limited rate
             ros::Duration time_elapsed = ros::Time::now() - last_time;
@@ -536,8 +572,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
             ros::spinOnce();
             loop_rate.sleep();
-            ros::Duration(1.0).sleep();
-            return;
+//            ros::Duration(1.0).sleep();
+//            return;
         }
     }
 };
