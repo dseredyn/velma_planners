@@ -52,7 +52,7 @@
 #include "planer_utils/reachability_map.h"
 #include "planer_utils/rrt_star.h"
 #include "planer_utils/simulator.h"
-#include "rrt.h"
+#include "est.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -267,12 +267,12 @@ public:
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
 
-        kin_model->setUpperLimit(2, 0.0);
-        kin_model->setLowerLimit(4, 0.0);
-        kin_model->setUpperLimit(6, 0.0);
-        kin_model->setLowerLimit(9, 0.0);
-        kin_model->setUpperLimit(11, 0.0);
-        kin_model->setLowerLimit(13, 0.0);
+        kin_model->setUpperLimit(2, -5.0/180.0*PI);
+        kin_model->setLowerLimit(4, 5.0/180.0*PI);
+        kin_model->setUpperLimit(6, -5.0/180.0*PI);
+        kin_model->setLowerLimit(9, 5.0/180.0*PI);
+        kin_model->setUpperLimit(11, -5.0/180.0*PI);
+        kin_model->setLowerLimit(13, 5.0/180.0*PI);
 
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
 
@@ -312,7 +312,7 @@ public:
 
 
         Eigen::VectorXd tmp_q(ndof);
-        RRT rrt(ndof, boost::bind(&TestDynamicModel::checkCollision2, this, _1, col_model),
+        EST est(ndof, boost::bind(&TestDynamicModel::checkCollision2, this, _1, col_model),
 //                boost::bind(&TestDynamicModel::sampleSpace, this, _1, lower_bound, upper_bound),
                 boost::bind(&TestDynamicModel::generatePossiblePose, this, _1, tmp_q, ndof, effector_name, col_model, kin_model),
                 0.05, 0.5, 0.8, kin_model, effector_name, sim);
@@ -320,7 +320,7 @@ public:
         // loop variables
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
-        ros::Rate loop_rate(100);
+        ros::Rate loop_rate(200);
         std::list<Eigen::VectorXd > target_path;
 
 //        KDL::Twist diff_target;
@@ -363,7 +363,7 @@ public:
 
             std::list<KDL::Frame > path_x;
             std::list<Eigen::VectorXd > path_q;
-            rrt.plan(saved_q, r_HAND_target, 0.05, &path_x, &path_q, markers_pub_);
+            est.plan(saved_q, r_HAND_target, 0.05, &path_x, &path_q, markers_pub_);
 
             std::cout << "planning ended " << path_x.size() << std::endl;
 

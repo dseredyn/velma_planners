@@ -109,16 +109,15 @@
         x = KDL::addDelta(x_from, diff, 1.0);
     }
 
-    bool RRT::collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out,
+    bool RRT::collisionFree(const Eigen::VectorXd &q_from, const Eigen::VectorXd &dq_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, Eigen::VectorXd &dq_to, KDL::Frame &x_to_out,
                             std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const {
         path_x->clear();
         path_q->clear();
 
         Eigen::VectorXd q(ndof_), dq(ndof_), ddq(ndof_);
-        dq.setZero();
         ddq.setZero();
         sim_->setTarget(x_to);
-        sim_->setState(q_from, dq, ddq);
+        sim_->setState(q_from, dq_from, ddq);
         KDL::Twist diff_target = KDL::diff(x_from, x_to, 1.0);
 
         for (int loop_counter = 0; loop_counter < 3000; loop_counter++) {
@@ -144,6 +143,7 @@
             KDL::Twist goal_diff( KDL::diff(r_HAND_current, x_to, 1.0) );
             if (goal_diff.vel.Norm() < 0.01 && goal_diff.rot.Norm() < 5.0/180.0*3.1415) {
                 q_to = q;
+                dq_to = dq;
                 x_to_out = r_HAND_current;
                 return true;
             }
@@ -203,13 +203,15 @@
         RRTState state_start;
         kin_model_->calculateFk(state_start.T_B_E_, effector_name_, q_start);
         state_start.q_ = q_start;
+        state_start.dq_.resize(ndof_);
+        state_start.dq_.setZero();
         V_[0] = state_start;
 
         bool goal_found = false;
 
         int m_id = 0;
         for (int step = 0; step < 100; step++) {
-            bool sample_goal = randomUniform(0,1) < 0.05;
+            bool sample_goal = false;//randomUniform(0,1) < 0.05;
             KDL::Frame x_rand;
 
             if (sample_goal) {
@@ -228,10 +230,11 @@
                 continue;
             }
             RRTState &state_nearest( V_.find(x_nearest_idx)->second );
-            KDL::Frame x_nearest = state_nearest.T_B_E_;
+//            KDL::Frame x_nearest = state_nearest.T_B_E_;
             KDL::Frame x_new;
             // get the new pose
-            steer(x_nearest, x_rand, 2.0, 170.0/180.0*3.1415, x_new);
+//            steer(state_nearest.T_B_E_, x_rand, 1.0, 90.0/180.0*3.1415, x_new);
+            steer(state_nearest.T_B_E_, x_rand, 0.5, 30.0/180.0*3.1415, x_new);
 
             bool is_goal_sample = false;
             KDL::Twist goal_diff( KDL::diff(x_new, x_goal, 1.0) );
@@ -239,16 +242,16 @@
                 is_goal_sample = true;
             }
 
-//            std::cout << x_nearest.p[0] << " " << x_nearest.p[1] << " " << x_nearest.p[2] << std::endl;
+//            std::cout << state_nearest.T_B_E_.p[0] << " " << state_nearest.T_B_E_.p[1] << " " << state_nearest.T_B_E_.p[2] << std::endl;
 //            std::cout << x_new.p[0] << " " << x_new.p[1] << " " << x_new.p[2] << std::endl;
 
-            Eigen::VectorXd q_new(ndof_);
+            Eigen::VectorXd q_new(ndof_), dq_new(ndof_);
             bool added_new = false;
             KDL::Frame T_B_E;
             std::list<KDL::Frame > sub_path_x;
             std::list<Eigen::VectorXd > sub_path_q;
-            bool col_free = collisionFree(state_nearest.q_, x_nearest, x_new, 0, q_new, T_B_E, &sub_path_x, &sub_path_q);
-                        std::list<KDL::Frame >::const_iterator x_it;
+            bool col_free = collisionFree(state_nearest.q_, state_nearest.dq_, state_nearest.T_B_E_, x_new, 0, q_new, dq_new, T_B_E, &sub_path_x, &sub_path_q);
+/*                        std::list<KDL::Frame >::const_iterator x_it;
                         std::list<Eigen::VectorXd >::const_iterator q_it;
                         for (x_it = sub_path_x.begin(), q_it = sub_path_q.begin(); x_it != sub_path_x.end(); x_it++, q_it++) {
                             added_new = true;
@@ -259,31 +262,45 @@
                             q_new_idx++;
                             V_[q_new_idx] = state_new;
                             E_[q_new_idx] = x_nearest_idx;
-                            m_id = markers_pub.addVectorMarker(q_new_idx, x_nearest.p, state_new.T_B_E_.p, 0, 0.7, 0, 0.5, 0.01, "world");
+                            m_id = markers_pub.addVectorMarker(q_new_idx, state_nearest.T_B_E_.p, state_new.T_B_E_.p, 0, 0.7, 0, 0.5, 0.01, "world");
                             x_nearest_idx = q_new_idx;
                             x_nearest = state_new.T_B_E_;
                         }
-
+*/
             if (col_free) {
 
                         added_new = true;
                         RRTState state_new;
                         state_new.T_B_E_ = T_B_E;
                         state_new.q_ = q_new;
+                        state_new.dq_ = dq_new;
                         state_new.ignore_to_goal_ = false;
                         q_new_idx++;
                         V_[q_new_idx] = state_new;
                         E_[q_new_idx] = x_nearest_idx;
-                        m_id = markers_pub.addVectorMarker(q_new_idx, x_nearest.p, T_B_E.p, 0, 0.7, 0, 0.5, 0.01, "world");
+                        m_id = markers_pub.addVectorMarker(q_new_idx, state_nearest.T_B_E_.p, T_B_E.p, 0, 0.7, 0, 0.5, 0.01, "world");
 
                         KDL::Twist goal_diff( KDL::diff(T_B_E, x_goal, 1.0) );
                         if (goal_diff.vel.Norm() < 0.06 && goal_diff.rot.Norm() < 20.0/180.0*3.1415) {
                             goal_found = true;
 //                            std::cout << "goal found" << std::endl;
                         }
+
+                        if (collisionFree(state_new.q_, state_new.dq_, state_new.T_B_E_, x_goal, 0, q_new, dq_new, T_B_E, &sub_path_x, &sub_path_q)) {
+                            goal_found = true;
+                            RRTState state_new;
+                            state_new.T_B_E_ = T_B_E;
+                            state_new.q_ = q_new;
+                            state_new.dq_ = dq_new;
+                            state_new.ignore_to_goal_ = false;
+                            q_new_idx++;
+                            V_[q_new_idx] = state_new;
+                            E_[q_new_idx] = q_new_idx-1;
+                            m_id = markers_pub.addVectorMarker(q_new_idx, V_[q_new_idx-1].T_B_E_.p, V_[q_new_idx].T_B_E_.p, 0, 1, 0, 0.5, 0.01, "world");
+                        }
             }
             else {
-
+/*
                 // this node was the goal node
                 if (is_goal_sample && x_nearest_idx > 0) {
                     std::set<int> nodes_to_remove;
@@ -308,7 +325,7 @@
                     }
 //                    std::cout << "removed nodes: " << removed_nodes_count << std::endl;
                 }
-
+*/
 /*                if (is_goal_sample) {
                     // mark the nearest node
                     state_nearest.ignore_to_goal_ = true;

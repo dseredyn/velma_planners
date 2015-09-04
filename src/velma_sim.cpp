@@ -54,6 +54,7 @@
 #include "planer_utils/random_uniform.h"
 #include "planer_utils/utilities.h"
 #include "planer_utils/simulator.h"
+#include "planer_utils/reachability_map.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -240,7 +241,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 }
 
     void spin() {
-
+/*
         std::vector<std::list<Eigen::VectorXd > > q_start_vec(6);
         FILE *f = fopen("exp01.txt", "rt");
         while (true) {
@@ -259,7 +260,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         }
         fclose(f);
 //        return;
-
+*/
         // initialize random seed
         srand(time(NULL));
 
@@ -281,7 +282,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
 
-        // the walls
+/*        // the walls
         std::vector<KDL::Vector > vertices;
         std::vector<int > polygons;
         generateBox(vertices, polygons, 0.2, 2.0, 2.0);
@@ -306,7 +307,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         generateBox(vertices, polygons, 0.4, 0.02, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0))) );
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0))) );
-
+*/
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
@@ -361,6 +362,14 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
 
+        kin_model->setUpperLimit(1, -5.0/180.0*PI);
+        kin_model->setUpperLimit(2, -5.0/180.0*PI);
+        kin_model->setLowerLimit(4, 5.0/180.0*PI);
+        kin_model->setUpperLimit(6, -5.0/180.0*PI);
+        kin_model->setLowerLimit(9, 5.0/180.0*PI);
+        kin_model->setUpperLimit(11, -5.0/180.0*PI);
+        kin_model->setLowerLimit(13, 5.0/180.0*PI);
+
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
 
         Eigen::VectorXd max_q(ndof);
@@ -391,6 +400,42 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
         }
 
+/*        // reachability map test
+        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.1, 3));
+        r_map->generateForArm(kin_model, "torso_link2", "right_HandPalmLink");
+
+        while (ros::ok()) {
+            KDL::Frame T_W_T2, T_T2_W;
+            kin_model->calculateFk(T_W_T2, "torso_link2", q);
+            T_T2_W = T_W_T2.Inverse();
+//            std::cout << r_map->getMaxValue() << std::endl;
+            int m_id = 0;
+            for (double x = -2.0; x < 2.0; x += 0.2) {
+                for (double y = -2.0; y < 2.0; y += 0.2) {
+                    for (double z = 0.5; z < 2.5; z += 0.2) {
+                        KDL::Vector pt_W(x,y,z);
+                        KDL::Vector pt_T2 = T_T2_W * pt_W;
+                        Eigen::VectorXd p(3);
+                        p(0) = pt_T2[0];
+                        p(1) = pt_T2[1];
+                        p(2) = pt_T2[2];
+                        double val = r_map->getValue(p);
+                        if (val > 0.001) {
+                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 1, val, val, 1, val*0.2, "world");
+                        }
+                    }
+                }
+            }
+            markers_pub_.publish();
+
+            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
+            ros::spinOnce();
+            loop_rate.sleep();
+            ros::Duration(0.5).sleep();
+        }
+        return;
+*/
+
         int_marker_pose_ = r_HAND_target;
         // create an interactive marker server on the topic namespace simple_marker
         interactive_markers::InteractiveMarkerServer server("simple_marker");
@@ -401,59 +446,10 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         server.applyChanges();
 
         int s_idx = 5;
-/*
-        while (ros::ok()) {
-            if (q_start_vec[s_idx].empty()) {
-                s_idx--;
-                if (s_idx < 0) {
-                    break;
-                }
-                continue;
-            }
-            q = q_start_vec[s_idx].back();
-            q_start_vec[s_idx].pop_back();
-            std::cout << "s: " << s_idx << "  q: " << q.transpose() << std::endl;
 
-            // calculate forward kinematics for all links
-            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
-            }
-
-            std::vector<self_collision::CollisionInfo> link_collisions;
-            self_collision::getCollisionPairs(col_model, links_fk, 0.1, link_collisions);
-            for (std::vector<self_collision::CollisionInfo>::const_iterator it = link_collisions.begin(); it != link_collisions.end(); it++) {
-                if ( it->dist <= 0.0 ) {
-                    break;
-                }
-            }
-
-            publishTransform(br, int_marker_pose_, "effector_dest", "world");
-
-//            std::cout << "collision pairs: " << link_collisions.size() << std::endl;
-            int m_id = 3000;
-            for (std::vector<self_collision::CollisionInfo>::const_iterator it = link_collisions.begin(); it != link_collisions.end(); it++) {
-                m_id = markers_pub_.addVectorMarker(m_id, it->p1_B, it->p2_B, 1, 1, 1, 1, 0.01, "world");
-                m_id = markers_pub_.addVectorMarker(m_id, it->p1_B, it->p1_B - 0.03 * it->n1_B, 1, 1, 1, 1, 0.01, "world");
-                m_id = markers_pub_.addVectorMarker(m_id, it->p2_B, it->p2_B - 0.03 * it->n2_B, 1, 1, 1, 1, 0.01, "world");
-            }
-            markers_pub_.addEraseMarkers(m_id, m_id+100);
-
-            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
-            m_id = 0;
-            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
-            markers_pub_.publish();
-            ros::spinOnce();
-            loop_rate.sleep();
-
-            getchar();
-        }
-
-        return;
-//*/
-
-//        std::string mode = "random_dest";
+        std::string mode = "random_dest";
 //        std::string mode = "marker_dest";
-        std::string mode = "random_start";
+//        std::string mode = "random_start";
 
         ros::Duration(1.0).sleep();
 
@@ -496,7 +492,11 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         while (ros::ok()) {
 
             if (mode == "random_dest") {
-                if (loop_counter > 1500*5) {
+                if (loop_counter > 1500*3) {
+                    sim->getState(q, dq, ddq);
+                    std::cout << "q: " << q.transpose() << std::endl;
+                    std::cout << "dq: " << dq.transpose() << std::endl;
+
                     Eigen::VectorXd q_tmp(ndof);
                     generatePossiblePose(r_HAND_target, q_tmp, ndof, effector_name, col_model, kin_model);
 

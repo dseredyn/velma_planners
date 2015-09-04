@@ -29,8 +29,8 @@
 // Author: Dawid Seredynski
 //
 
-#ifndef RRT_H__
-#define RRT_H__
+#ifndef RTA_STAR_H__
+#define RTA_STAR_H__
 
 #include "Eigen/Dense"
 
@@ -38,20 +38,24 @@
 #include "kin_model/kin_model.h"
 #include "planer_utils/simulator.h"
 
-class RRTState {
+class RTAStarState {
 public:
+    RTAStarState(int nodes);
     KDL::Frame T_B_E_;
     Eigen::VectorXd q_;
     Eigen::VectorXd dq_;
-    bool ignore_to_goal_;
+    std::vector<int > neighbour_nodes_;
+    std::vector<bool > simulated_nodes_;
+    int parent_idx_;
+    int parent_tr_idx_;
+    double h_value_;
 };
 
-class RRT {
+class RTAStar {
 public:
 
-    RRT(int ndof,
+    RTAStar(int ndof,
             boost::function<bool(const KDL::Frame &x)> collision_func,
-            boost::function<void(KDL::Frame &sample)> sampleSpace_func,
             double collision_check_step, double steer_dist, double near_dist,
             const boost::shared_ptr<KinematicModel> &kin_model,
             const std::string &effector_name,
@@ -59,36 +63,38 @@ public:
 
     bool isPoseValid(const KDL::Frame &x) const;
 
-    void sampleSpace(KDL::Frame &sample) const;
-
-    bool sampleFree(KDL::Frame &sample_free) const;
-
-    int nearest(const KDL::Frame &x, bool to_goal) const;
-
-    void steer(const KDL::Frame &x_from, const KDL::Frame &x_to, double steer_dist_lin, double steer_dist_rot, KDL::Frame &x) const;
-
     bool collisionFree(const Eigen::VectorXd &q_from, const Eigen::VectorXd &dq_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, Eigen::VectorXd &dq_to, KDL::Frame &x_to_out,
                             std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const;
 
 //    bool collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out,
 //                        std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const;
 
-    double costLine(const KDL::Frame &x1, const KDL::Frame &x2) const;
-
-    double costLine(int x1_idx, int x2_idx) const;
-
-    double cost(int q_idx) const;
-
-    void getPath(int q_idx, std::list<int > &path) const;
-
-    void plan(const Eigen::VectorXd &q_start, const KDL::Frame &x_goal, double goal_tolerance, std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q, MarkerPublisher &markers_pub);
+    void plan(const Eigen::VectorXd &q_start, const KDL::Frame &x_goal, std::list<Eigen::VectorXd > &path_q, MarkerPublisher &markers_pub);
 
     int addTreeMarker(MarkerPublisher &markers_pub, int m_id) const;
 
+    int checkIfStateExists(int excluded_index, const RTAStarState &state) const;
+
+    double getCostLine(const KDL::Frame &x1, const KDL::Frame &x2) const;
+
+//    bool expand_graph(int node_idx, double parent_goal_min_cost, int parent_node_idx, int parent_tr_idx, MarkerPublisher &markers_pub);
+
+    void setGoal(const KDL::Frame &g);
+
+    double getCostH(const KDL::Frame &x) const;
+
+    double lookahead(const KDL::Frame &T_B_E, int depth) const;
+
 protected:
+
+    int q_new_idx_;
+    std::vector<KDL::Frame > transform_delta_vec_;
+    std::map<int, int> inverse_transformation_map_;
+    KDL::Frame goal_;
+
     boost::function<bool(const KDL::Frame &x)> collision_func_;
     boost::function<void(KDL::Frame &sample)> sampleSpace_func_;
-    std::map<int, RRTState > V_;
+    std::map<int, RTAStarState > V_;
     std::map<int, int > E_;
     double collision_check_step_;
     int ndof_;
@@ -99,5 +105,5 @@ protected:
     boost::shared_ptr<DynamicsSimulatorHandPose> &sim_;
 };
 
-#endif  // RRT_H__
+#endif  // RTA_STAR_H__
 

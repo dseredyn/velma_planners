@@ -18,6 +18,8 @@ add_executable(test_velma_sim src/velma_sim.cpp src/velma_dyn_model.cpp)
 add_executable(test_velma_rrt src/velma_rrt.cpp src/velma_dyn_model.cpp)
 add_executable(test_velma_rrt2 src/velma_rrt2.cpp src/velma_dyn_model.cpp src/rrt.cpp)
 add_executable(test_velma_rrt3 src/velma_rrt3.cpp src/velma_dyn_model.cpp)
+add_executable(test_velma_est src/velma_est.cpp src/velma_dyn_model.cpp src/est.cpp)
+add_executable(test_velma_rta_star src/velma_rta_star.cpp src/velma_dyn_model.cpp src/rta_star.cpp)
 add_executable(test_velma_planners_comp src/velma_planners_comp.cpp src/velma_dyn_model.cpp src/rrt.cpp)
 
 target_link_libraries(test_velma_ompl ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
@@ -25,6 +27,8 @@ target_link_libraries(test_velma_sim ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_rrt ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_rrt2 ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_rrt3 ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
+target_link_libraries(test_velma_est ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
+target_link_libraries(test_velma_rta_star ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_planners_comp ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 
 catkin_package(

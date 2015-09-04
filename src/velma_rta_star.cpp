@@ -52,7 +52,7 @@
 #include "planer_utils/reachability_map.h"
 #include "planer_utils/rrt_star.h"
 #include "planer_utils/simulator.h"
-#include "rrt.h"
+#include "rta_star.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -107,9 +107,9 @@ public:
         boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.1, x);
         KDL::Frame T_B_L1;
         KDL::Frame T_B_L2;
-        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2);
-        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-
+//        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2);
+//        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
+//        std::cout << "checkCollision2 " << x.p[0] << " " << x.p[1] << " " << x.p[2] << std::endl;
         return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2) || self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
     }
 
@@ -169,6 +169,68 @@ public:
 
     void spin() {
 
+/*
+        // initialize random seed
+        srand(time(NULL));
+
+        for (int i=0; i<1000; i++) {
+            double min_cost_current = -1.0;
+            double min_cost_current2 = -1.0;
+            std::vector<int> vec;
+            for (int i=0; i<20; i++) {
+                int val = rand()%200;
+                vec.push_back(val);
+//                std::cout << val << std::endl;
+            }
+            for (int tr_idx = 0; tr_idx < vec.size(); tr_idx++) {
+
+                double cost_goal = vec[tr_idx];
+                    if (min_cost_current < 0) {
+                        min_cost_current = cost_goal;
+                    }
+                    else if (cost_goal < min_cost_current) {
+                        min_cost_current2 = min_cost_current;
+                        min_cost_current = cost_goal;
+                    }
+                    else if (cost_goal < min_cost_current2) {
+                        min_cost_current2 = cost_goal;
+                    }
+
+                    if (min_cost_current >= 0 && min_cost_current2 < 0) {
+                        min_cost_current2 = cost_goal;
+                    }
+            }
+
+            double ver_min1 = -1;
+            double ver_min2 = -1;
+            int ver_min1_idx = -1;
+            for (int tr_idx = 0; tr_idx < vec.size(); tr_idx++) {
+                double cost_goal = vec[tr_idx];
+                if (ver_min1 < 0 || ver_min1 > cost_goal) {
+                    ver_min1 = cost_goal;
+                    ver_min1_idx = tr_idx;
+                }
+            }            
+            for (int tr_idx = 0; tr_idx < vec.size(); tr_idx++) {
+                if (ver_min1_idx == tr_idx) {
+                    continue;
+                }
+                double cost_goal = vec[tr_idx];
+                if (ver_min2 < 0 || ver_min2 > cost_goal) {
+                    ver_min2 = cost_goal;
+                }
+            }
+            if (ver_min1 != min_cost_current || ver_min2 != min_cost_current2) {
+                std::cout << "error! " << min_cost_current << " " << min_cost_current2 << " should be " << ver_min1 << " " << ver_min2 << std::endl;
+                for (int i=0; i<20; i++) {
+                    std::cout << "vec " << vec[i] << std::endl;
+                }
+            }
+        }
+//        std::cout << min_cost_current << " " << min_cost_current2 << std::endl;
+        return;
+*/
+
         // initialize random seed
         srand(time(NULL));
 
@@ -190,15 +252,17 @@ public:
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
 
-        // the walls
+/*        // the walls
         std::vector<KDL::Vector > vertices;
         std::vector<int > polygons;
-        generateBox(vertices, polygons, 0.2, 2.0, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(-0.65, 0.0, 1.3))) );
+        generateBox(vertices, polygons, 0.2, 2.0, 0.2);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(-0.65, 2.0, 0.0))) );
 
-        generateBox(vertices, polygons, 2.0, 0.2, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 1.0, 1.3))) );
-
+        generateBox(vertices, polygons, 2.0, 0.2, 0.2);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 2.3, 0.0))) );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 1.7, 0.0))) );
+*/
+/*
         generateBox(vertices, polygons, 2.0, 2.0, 0.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 0.0, 2.3))) );
 
@@ -215,7 +279,7 @@ public:
         generateBox(vertices, polygons, 0.4, 0.02, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0))) );
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0))) );
-
+*/
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
@@ -267,12 +331,12 @@ public:
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
 
-        kin_model->setUpperLimit(2, 0.0);
-        kin_model->setLowerLimit(4, 0.0);
-        kin_model->setUpperLimit(6, 0.0);
-        kin_model->setLowerLimit(9, 0.0);
-        kin_model->setUpperLimit(11, 0.0);
-        kin_model->setLowerLimit(13, 0.0);
+        kin_model->setUpperLimit(2, -5.0/180.0*PI);
+        kin_model->setLowerLimit(4, 5.0/180.0*PI);
+        kin_model->setUpperLimit(6, -5.0/180.0*PI);
+        kin_model->setLowerLimit(9, 5.0/180.0*PI);
+        kin_model->setUpperLimit(11, -5.0/180.0*PI);
+        kin_model->setLowerLimit(13, 5.0/180.0*PI);
 
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
 
@@ -310,17 +374,36 @@ public:
         boost::shared_ptr<DynamicsSimulatorHandPose> sim( new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, max_q) );
         sim->setState(saved_q, saved_dq, saved_ddq);
 
+        ros::Rate loop_rate(200);
 
-        Eigen::VectorXd tmp_q(ndof);
-        RRT rrt(ndof, boost::bind(&TestDynamicModel::checkCollision2, this, _1, col_model),
-//                boost::bind(&TestDynamicModel::sampleSpace, this, _1, lower_bound, upper_bound),
-                boost::bind(&TestDynamicModel::generatePossiblePose, this, _1, tmp_q, ndof, effector_name, col_model, kin_model),
+/*
+        RTAStar rta2(ndof, boost::bind(&TestDynamicModel::checkCollision2, this, _1, col_model),
+                0.05, 0.5, 0.8, kin_model, effector_name, sim);
+
+        while (ros::ok()) {
+            Eigen::VectorXd start(3);
+            start(0) = 0.0;
+            start(1) = 2.0;
+            start(2) = 0.0;
+            KDL::Frame goal( KDL::Frame(KDL::Vector(-2,2,0)) );
+            publishTransform(br, goal, "effector_dest", "world");
+            int m_id = 5000;
+                    m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+                    markers_pub_.publish();
+                    ros::spinOnce();
+                    loop_rate.sleep();
+
+            rta2.plan(start, goal, markers_pub_);
+        }
+
+        return;
+*/
+        RTAStar rta(ndof, boost::bind(&TestDynamicModel::checkCollision2, this, _1, col_model),
                 0.05, 0.5, 0.8, kin_model, effector_name, sim);
 
         // loop variables
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
-        ros::Rate loop_rate(100);
         std::list<Eigen::VectorXd > target_path;
 
 //        KDL::Twist diff_target;
@@ -341,20 +424,25 @@ public:
             // get the current pose
             sim->getState(saved_q, saved_dq, saved_ddq);
 
-            while (true) {
-                Eigen::VectorXd tmp_q(ndof), tmp_dq(ndof), tmp_ddq(ndof);
-                generatePossiblePose(r_HAND_target, tmp_q, ndof, effector_name, col_model, kin_model);
-                tmp_dq.setZero();
-                tmp_ddq.setZero();
-                sim->setState(tmp_q, tmp_dq, tmp_ddq);
-                sim->setTarget(r_HAND_target);
-                sim->oneStep();
-                if (!sim->inCollision()) {
-                    break;
-                }
-            }
 
-//            generatePossiblePose(r_HAND_target, ndof, effector_name, col_model, kin_model);
+                    // calculate forward kinematics for all links
+                    for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                        kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), saved_q);
+                    }
+
+                    publishJointState(joint_state_pub_, saved_q, joint_names, ign_q, ign_joint_names);
+                    int m_id = 2000;
+                    m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+                    markers_pub_.publish();
+                    ros::spinOnce();
+                    loop_rate.sleep();
+
+
+//            r_HAND_target = KDL::Frame(KDL::Vector(randomUniform(-3.0,3.0), randomUniform(-3.0,3.0), randomUniform(0,3.0)));
+            {
+                Eigen::VectorXd tmp_q(ndof);
+                generatePossiblePose(r_HAND_target, tmp_q, ndof, effector_name, col_model, kin_model);
+            }
             publishTransform(br, r_HAND_target, "effector_dest", "world");
 
 
@@ -363,13 +451,48 @@ public:
 
             std::list<KDL::Frame > path_x;
             std::list<Eigen::VectorXd > path_q;
-            rrt.plan(saved_q, r_HAND_target, 0.05, &path_x, &path_q, markers_pub_);
+            rta.plan(saved_q, r_HAND_target, path_q, markers_pub_);
 
             std::cout << "planning ended " << path_x.size() << std::endl;
 
             // execute the planned path
             sim->setState(saved_q, saved_dq, saved_ddq);
 
+                for (double f = 0.0; f < 1.0; f += 0.001) {
+                    Eigen::VectorXd x(ndof);
+                    getPointOnPath(path_q, f, x);
+
+                    std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
+                    // calculate forward kinematics for all links
+                    for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                        kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), x);
+                    }
+
+                    publishJointState(joint_state_pub_, x, joint_names, ign_q, ign_joint_names);
+                    int m_id = 2000;
+                    m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+
+                    std::vector<self_collision::CollisionInfo> link_collisions;
+                    self_collision::getCollisionPairs(col_model, links_fk, 0.2, link_collisions);
+                    for (std::vector<self_collision::CollisionInfo>::const_iterator it = link_collisions.begin(); it != link_collisions.end(); it++) {
+                        m_id = markers_pub_.addVectorMarker(m_id, it->p1_B, it->p2_B, 1, 1, 1, 1, 0.01, "world");                        
+                    }
+
+                    std::set<int> excluded_link_idx;
+                    if (self_collision::checkCollision(col_model, links_fk, excluded_link_idx)) {
+                        std::cout << "collision " << f << std::endl;
+                    }
+
+                    markers_pub_.addEraseMarkers(m_id, m_id+100);
+
+                    markers_pub_.publish();
+
+                    ros::spinOnce();
+                    ros::Duration(0.01).sleep();
+                }
+
+
+/*
             for (std::list<KDL::Frame >::const_iterator it = path_x.begin(); it != path_x.end(); it++) {
                 sim->setTarget( (*it) );
 //                KDL::Twist diff_target = KDL::diff( T_B_E, (*it), 1.0);
@@ -403,6 +526,7 @@ public:
                 }
                 std::cout << "loop end" << std::endl;
             }
+*/
             std::cout << "path end" << std::endl;
 
 //            sim->setState(saved_q, saved_dq, saved_ddq);

@@ -29,8 +29,8 @@
 // Author: Dawid Seredynski
 //
 
-#ifndef RRT_H__
-#define RRT_H__
+#ifndef EST_H__
+#define EST_H__
 
 #include "Eigen/Dense"
 
@@ -38,18 +38,18 @@
 #include "kin_model/kin_model.h"
 #include "planer_utils/simulator.h"
 
-class RRTState {
+class ESTState {
 public:
     KDL::Frame T_B_E_;
     Eigen::VectorXd q_;
     Eigen::VectorXd dq_;
-    bool ignore_to_goal_;
+    std::list<KDL::Twist > failed_controls_;
 };
 
-class RRT {
+class EST {
 public:
 
-    RRT(int ndof,
+    EST(int ndof,
             boost::function<bool(const KDL::Frame &x)> collision_func,
             boost::function<void(KDL::Frame &sample)> sampleSpace_func,
             double collision_check_step, double steer_dist, double near_dist,
@@ -67,11 +67,10 @@ public:
 
     void steer(const KDL::Frame &x_from, const KDL::Frame &x_to, double steer_dist_lin, double steer_dist_rot, KDL::Frame &x) const;
 
+//    bool collisionFree(const Eigen::VectorXd &q_from, const Eigen::VectorXd &dq_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, Eigen::VectorXd &dq_to, KDL::Frame &x_to_out,
+//                            std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const;
     bool collisionFree(const Eigen::VectorXd &q_from, const Eigen::VectorXd &dq_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, Eigen::VectorXd &dq_to, KDL::Frame &x_to_out,
-                            std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const;
-
-//    bool collisionFree(const Eigen::VectorXd &q_from, const KDL::Frame &x_from, const KDL::Frame &x_to, int try_idx, Eigen::VectorXd &q_to, KDL::Frame &x_to_out,
-//                        std::list<KDL::Frame > *path_x, std::list<Eigen::VectorXd > *path_q) const;
+                            std::list<ESTState > *path) const;
 
     double costLine(const KDL::Frame &x1, const KDL::Frame &x2) const;
 
@@ -86,9 +85,11 @@ public:
     int addTreeMarker(MarkerPublisher &markers_pub, int m_id) const;
 
 protected:
+    std::list<std::pair<int, int> > node_count_idx_;
+
     boost::function<bool(const KDL::Frame &x)> collision_func_;
     boost::function<void(KDL::Frame &sample)> sampleSpace_func_;
-    std::map<int, RRTState > V_;
+    std::map<int, ESTState > V_;
     std::map<int, int > E_;
     double collision_check_step_;
     int ndof_;
@@ -99,5 +100,5 @@ protected:
     boost::shared_ptr<DynamicsSimulatorHandPose> &sim_;
 };
 
-#endif  // RRT_H__
+#endif  // EST_H__
 
