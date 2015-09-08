@@ -240,207 +240,6 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 //    menu_handler.apply( server, int_marker.name );
 }
 
-    bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
-        // create dummy object
-        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.1, KDL::Frame(x));
-        KDL::Frame T_B_L1;
-        KDL::Frame T_B_L2;
-        return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-    }
-
-    KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map) {
-        KDL::Twist diff = KDL::diff(F_a_b1, F_a_b2, 1.0);
-        if (diff.vel.Norm() < 0.05) {
-            return diff;
-        }
-
-        double dist = (F_a_b1.p - F_a_b2.p).Norm();
-        KDL::Vector gr;
-        if (r_map->getGradient(F_a_b1.p, gr)) {
-            diff.vel = gr * dist;
-            int m_id = 6000;
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + gr*0.3, 0, 0, 1, 1, 0.005, "world");
-            markers_pub_.addEraseMarkers(m_id, m_id+300);
-            markers_pub_.publish();
-            ros::spinOnce();
-        }
-
-
-        return diff;
-
-        KDL::Vector points_E[4] = {
-        KDL::Vector(0, 0, 0),
-        KDL::Vector(0, -0.13, 0.02),
-        KDL::Vector(0.03, 0.13, 0.02),
-        KDL::Vector(-0.03, 0.13, 0.02),
-        };
-
-        int m_id = 6000;
-
-        std::list<std::vector<ReachabilityMap::GradientInfo > > gradients_list;
-        for (int i=0; i<4; i++) {
-            KDL::Vector pt_W = F_a_b1 * points_E[i];
-            std::vector<ReachabilityMap::GradientInfo > gradients;
-            gradients.resize(27);
-            if (r_map->getAllGradients(pt_W, gradients)) {
-                gradients_list.push_back(gradients);
-            }
-        }
-
-        if (gradients_list.empty()) {
-            return diff;
-        }
-
-        bool valid_directions[27];
-        for (int i=0; i<27; i++) {
-            valid_directions[i] = true;
-        }
-
-        // AND all gradient directions
-        int max_restrictions = 0;
-        std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator max_restrictions_it = gradients_list.end(); 
-        int invalid_dirs = 0;
-        for (std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator it = gradients_list.begin(); it != gradients_list.end(); it++) {
-            int restrictions = 0;
-            for (int i=0; i<27; i++) {
-                if ( !(*it)[i].valid_ && valid_directions[i]) {
-                    valid_directions[i] = false;
-                    restrictions++;
-                    invalid_dirs++;
-                }
-            }
-            if (restrictions > max_restrictions) {
-                max_restrictions = restrictions;
-                max_restrictions_it = it;
-            }
-        }
-
-        if (max_restrictions_it != gradients_list.end()) {
-            double min_value = 10000.0;
-            KDL::Vector min_direction;
-            int min_direction_idx;
-            for (int i=0; i<27; i++) {
-                if ( valid_directions[i] ) {
-                    if (min_value > (*max_restrictions_it)[i].value_) {
-                        min_value = (*max_restrictions_it)[i].value_;
-                        min_direction = (*max_restrictions_it)[i].direction_;
-                        min_direction_idx = i;
-                    }
-                }
-            }
-
-            double dist = (F_a_b1.p - F_a_b2.p).Norm();
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + min_direction*0.2, 0, 0, 1, 1, 0.005, "world");
-            diff.vel = min_direction * dist;
-            return diff;
-        }
-        else {
-            // no restrictions
-            KDL::Vector mean_direction;
-            int pt_i = 0;
-            for (std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator it = gradients_list.begin(); it != gradients_list.end(); it++) {
-                double min_value = 10000.0;
-                KDL::Vector min_direction;
-                int min_direction_idx;
-                for (int i=0; i<27; i++) {
-                    if ( valid_directions[i] ) {
-                        if (min_value > (*it)[i].value_) {
-                            min_value = (*it)[i].value_;
-                            min_direction = (*it)[i].direction_;
-                            min_direction_idx = i;
-                        }
-                    }
-                }
-
-                KDL::Vector pt_W = F_a_b1 * points_E[pt_i];
-                for (int i=0; i<27; i++) {
-                    if ((*it)[i].valid_) {
-                        if (min_direction_idx == i) {
-                            m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + (*it)[i].direction_*0.05, 1, 1, 1, 1, 0.005, "world");
-                        }
-                        else {
-                            m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + (*it)[i].direction_*0.05, 0, 0, 1, 1, 0.005, "world");
-                        }
-                    }
-                }
-
-                mean_direction += min_direction;
-                pt_i++;
-            }
-
-            double dist = (F_a_b1.p - F_a_b2.p).Norm();
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + mean_direction*0.2, 0, 0, 1, 1, 0.005, "world");
-            diff.vel = mean_direction * dist;
-            return diff;
-        }
-/*
-//        std::cout << invalid_dirs << std::endl;
-        KDL::Vector mean_direction;
-
-        double tmin_value = -10000.0;
-        KDL::Vector tmin_direction;
-
-        int i=0;
-        for (std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator it = gradients_list.begin(); it != gradients_list.end(); it++) {
-            double min_value = 10000.0;
-            KDL::Vector min_direction;
-            int min_direction_idx;
-            for (int i=0; i<27; i++) {
-                if ( valid_directions[i] ) {
-//                    if ((*it)[i].value_ < 0) {
-//                        min_direction += (*it)[i].direction_;
-//                    }
-                    if (min_value > (*it)[i].value_) {
-                        min_value = (*it)[i].value_;
-                        min_direction = (*it)[i].direction_;
-                        min_direction_idx = i;
-                    }
-                }
-            }
-
-            KDL::Vector pt_W = F_a_b1 * points_E[i];
-            for (int i=0; i<27; i++) {
-                if ((*it)[i].valid_) {
-                    if (min_direction_idx == i) {
-                        m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + (*it)[i].direction_*0.05, 1, 1, 1, 1, 0.005, "world");
-                    }
-                    else {
-                        m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + (*it)[i].direction_*0.05, 0, 0, 1, 1, 0.005, "world");
-                    }
-                }
-            }
-
-            mean_direction += min_direction;
-            if (tmin_value < min_value) {
-                        tmin_value = min_value;
-                        tmin_direction = min_direction;
-            }
-            i++;
-        }
-
-        if (!gradients_list.empty()) {
-            mean_direction.Normalize();
-            double dist = (F_a_b1.p - F_a_b2.p).Norm();
-
-//            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + mean_direction*0.2, 0, 0, 1, 1, 0.005, "world");
-//            diff.vel = mean_direction * dist;
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + tmin_direction*0.2, 0, 0, 1, 1, 0.005, "world");
-            diff.vel = tmin_direction * dist;
-        }
-
-        markers_pub_.addEraseMarkers(m_id, m_id+300);
-        markers_pub_.publish();
-        ros::spinOnce();
-
-//        KDL::Vector gr;
-//        if ((F_a_b1.p - F_a_b2.p).Norm() > 0.05 && r_map->getDistnace(F_a_b1.p, dist) && r_map->getGradient(F_a_b1.p, gr)) {
-//        if (dist > 0.15 && r_map->getGradient(F_a_b1.p, gr)) {
-//            diff.vel = gr * dist;
-//        }
-
-        return diff;*/
-    }
-
     void spin() {
 /*
         std::vector<std::list<Eigen::VectorXd > > q_start_vec(6);
@@ -483,7 +282,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
 
-        // the walls
+/*        // the walls
         std::vector<KDL::Vector > vertices;
         std::vector<int > polygons;
         generateBox(vertices, polygons, 0.2, 2.0, 2.0);
@@ -508,7 +307,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         generateBox(vertices, polygons, 0.4, 0.02, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0))) );
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0))) );
-
+*/
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
@@ -551,29 +350,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 //        q[0] = 1.2;
         q[2] = 1.0;
 
-        double init_q[15] = {
-        0.0,
-        120.0/180.0*PI,
-        -90.0/180.0*PI,
-        110.0/180.0*PI,
-        140.0/180.0*PI,
-        0.0/180.0*PI,
-        -40.0/180.0*PI,
-        0.0/180.0*PI,
-        90.0/180.0*PI,
-        90.0/180.0*PI,
-        -90.0/180.0*PI,
-        -90.0/180.0*PI,
-        0.0/180.0*PI,
-        90.0/180.0*PI,
-        -90.0/180.0*PI,
-        };
-
-        for (int q_idx = 0; q_idx < ndof; q_idx++) {
-            q(q_idx) = init_q[q_idx];
-        }
-
-        std::string effector_name = "right_HandGripLink";
+        std::string effector_name = "right_HandPalmLink";
         int effector_idx = col_model->getLinkIndex(effector_name);
 
         //
@@ -581,12 +358,6 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         //
         boost::shared_ptr<KinematicModel > kin_model( new KinematicModel(robot_description_str, joint_names) );
         kin_model->setIgnoredJointValue("torso_1_joint", -90.0/180.0*PI);
-        kin_model->setIgnoredJointValue("right_HandFingerOneKnuckleTwoJoint", 120.0/180.0*PI);
-        kin_model->setIgnoredJointValue("right_HandFingerTwoKnuckleTwoJoint", 120.0/180.0*PI);
-        kin_model->setIgnoredJointValue("right_HandFingerThreeKnuckleTwoJoint", 120.0/180.0*PI);
-        kin_model->setIgnoredJointValue("right_HandFingerOneKnuckleThreeJoint", 40.0/180.0*PI);
-        kin_model->setIgnoredJointValue("right_HandFingerTwoKnuckleThreeJoint", 40.0/180.0*PI);
-        kin_model->setIgnoredJointValue("right_HandFingerThreeKnuckleThreeJoint", 40.0/180.0*PI);
         Eigen::VectorXd ign_q;
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
@@ -611,14 +382,14 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         max_q(6) = max_q(13) = 50.0/180.0*PI;   // arm_5_joint
         max_q(7) = max_q(14) = 50.0/180.0*PI;   // arm_6_joint
 
-        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, 100.0*max_q ) );
+        boost::shared_ptr<DynamicsSimulatorHandPose> sim( new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, max_q) );
 
         // loop variables
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
-        int loop_counter = 50000;
-        ros::Rate loop_rate(100);
-/*
+        int loop_counter = 10000;
+        ros::Rate loop_rate(500);
+
         while (true) {
             generatePossiblePose(r_HAND_target, q, ndof, effector_name, col_model, kin_model);
             sim->setState(q, dq, ddq);
@@ -628,124 +399,6 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                 break;
             }
         }
-*/
-        // TEST: distance map
-        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.025, 3));
-
-
-        KDL::Vector lower_bound(0.5, -0.7, 1.0);
-        KDL::Vector upper_bound(2.0, 0.7, 2.0);
-        if (!r_map->createDistanceMap(KDL::Vector(1.05, 0.0, 1.35), boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
-            std::cout << "could not create the distance map" << std::endl;
-        }
-        else {
-            std::cout << "created distance map" << std::endl;
-        }
-
-//        return;
-        sim->updateMetric( boost::bind(&TestDynamicModel::distanceMetric, this, _1, _2, r_map) );
-
-
-/*
-        while (ros::ok()) {
-            int m_id = 0;
-
-            for (double x = lower_bound(0)-0.1; x < upper_bound(0)+0.1; x += 0.025) {
-//                break;
-                {
-                    double y = 0.0;
-//                for (double y = lower_bound(1)+0.2; y < upper_bound(1)-0.5; y += 0.025) {
-                    for (double z = lower_bound(2)+0.1; z < upper_bound(2)-0.4; z += 0.025)
-                    {
-//                        double z = 1.4;
-                        KDL::Vector pt_W(x,y,z);
-                        double val = 0.0;
-                        if (!r_map->getDistnace(pt_W, val)) {   
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 0, 0, 0, 0.5, 0.01, "world");
-                        }
-                        else if (val == -1.0) {
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 1, 1, 0, 0.5, 0.01, "world");
-                        }
-                        else if (val == -2.0) {
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.01, "world");
-                        }
-                        else if (val >= 0.0) {
-                            val /= 1.1;
-                            KDL::Vector gr;
-                            if (r_map->getGradient(pt_W, gr)) {
-                                m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + gr*0.03, 0, 1, 0, 1, 0.01, "world");
-                            }
-                            else {
-                                m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.02, "world");
-                            }
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.01, "world");
-                        }
-                    }
-                }
-            }
-            KDL::Vector rand_pt(randomUniform(lower_bound(0)-1, upper_bound(0)+1), randomUniform(lower_bound(1), upper_bound(1)), randomUniform(lower_bound(2), upper_bound(2)));
-            m_id = markers_pub_.addSinglePointMarker(m_id, rand_pt, 1, 0, 0, 0.5, 0.1, "world");
-            int path_length = 0;
-            while (true) {
-                bool use_twist = true;
-                if (use_twist) {
-                    KDL::Twist twist = distanceMetric(KDL::Frame(rand_pt), KDL::Frame(KDL::Vector(1.05, 0.0, 1.35)), r_map);
-                    KDL::Vector prev = rand_pt;
-                    rand_pt = rand_pt + twist.vel * 0.02;
-                    m_id = markers_pub_.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
-                }
-                else {
-                    KDL::Vector gr;
-                    double dist = 0.0;
-                    if (!r_map->getDistnace(rand_pt, dist) || dist < 0.05) {
-                        std::cout << "distance failed" << std::endl;
-                        break;
-                    }
-                    std::vector<ReachabilityMap::GradientInfo > gradients;
-                    gradients.resize(27);
-                    r_map->getAllGradients(rand_pt, gradients);
-                    for (int i=0; i<27; i++) {
-                        if (gradients[i].valid_) {
-                            m_id = markers_pub_.addVectorMarker(m_id, rand_pt, rand_pt + gradients[i].direction_*0.02, 0, 0, 1, 1, 0.005, "world");
-                        }
-                    }
-
-                    if (r_map->getGradient(rand_pt, gr)) {
-                        KDL::Vector prev = rand_pt;
-                        rand_pt = rand_pt + gr * 0.02;
-                        m_id = markers_pub_.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
-                    }
-                    else {
-                        std::cout << "gradient failed" << std::endl;
-                        break;
-                    }
-                }
-                path_length++;
-                if (path_length > 300) {
-                    std::cout << "path length exceeded" << std::endl;
-                    break;
-                }
-            }
-            markers_pub_.addEraseMarkers(m_id, m_id+300);
-
-            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
-            }
-
-            m_id = 5000;
-            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
-            markers_pub_.publish();
-            markers_pub_.publish();
-
-            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
-            ros::spinOnce();
-            loop_rate.sleep();
-            ros::Duration(0.5).sleep();
-            getchar();
-        }
-
-        return;
-//*/
 
 /*        // reachability map test
         boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.1, 3));
@@ -794,9 +447,9 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 
         int s_idx = 5;
 
-//        std::string mode = "random_dest";
+        std::string mode = "random_dest";
 //        std::string mode = "marker_dest";
-        std::string mode = "random_start";
+//        std::string mode = "random_start";
 
         ros::Duration(1.0).sleep();
 
@@ -835,13 +488,16 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         return;
 //*/
 
+        std::list<std::pair<KDL::Frame, std::list<Eigen::VectorXd > > > success_list;
+        std::list<std::pair<KDL::Frame, std::list<Eigen::VectorXd > > > failure_list;
+
         std::list<Eigen::VectorXd > q_history_latest;
         std::list<Eigen::VectorXd > q_history;
         bool collision_in_prev_step = false;
         while (ros::ok()) {
 
             if (mode == "random_dest") {
-                if (loop_counter > 1500*10) {
+                if (loop_counter > 1500*3) {
                     sim->getState(q, dq, ddq);
                     std::cout << "q: " << q.transpose() << std::endl;
                     std::cout << "dq: " << dq.transpose() << std::endl;
@@ -850,6 +506,48 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                     generatePossiblePose(r_HAND_target, q_tmp, ndof, effector_name, col_model, kin_model);
 
                     sim->setTarget(r_HAND_target);
+
+                    if (!success_list.empty()) {
+                        double min_diff = 10000000.0;
+                        std::list<std::pair<KDL::Frame, std::list<Eigen::VectorXd > > >::const_iterator min_it;
+                        for (std::list<std::pair<KDL::Frame, std::list<Eigen::VectorXd > > >::const_iterator it = success_list.begin(); it != success_list.end(); it++) {
+                            KDL::Twist diff = KDL::diff(it->first, r_HAND_target);
+                            double diff_d = diff.vel.Norm() + 1.0 * diff.rot.Norm();
+                            if (diff_d < min_diff) {
+                                min_diff = diff_d;
+                                min_it = it;
+                            }
+                        }
+                        double min_q = 10000000.0;
+                        for (std::list<Eigen::VectorXd >::const_iterator it = min_it->second.begin(); it != min_it->second.end(); it++) {
+                            double q_diff = ((*it) - q).norm();
+                            if (q_diff < min_q) {
+                                min_q = q_diff;
+                            }
+                        }
+                        std::cout << "success: " << min_diff << " " << min_q << std::endl;
+                    }
+
+                    if (!failure_list.empty()) {
+                        double min_diff = 10000000.0;
+                        std::list<std::pair<KDL::Frame, std::list<Eigen::VectorXd > > >::const_iterator min_it;
+                        for (std::list<std::pair<KDL::Frame, std::list<Eigen::VectorXd > > >::const_iterator it = failure_list.begin(); it != failure_list.end(); it++) {
+                            KDL::Twist diff = KDL::diff(it->first, r_HAND_target);
+                            double diff_d = diff.vel.Norm() + 1.0 * diff.rot.Norm();
+                            if (diff_d < min_diff) {
+                                min_diff = diff_d;
+                                min_it = it;
+                            }
+                        }
+                        double min_q = 10000000.0;
+                        for (std::list<Eigen::VectorXd >::const_iterator it = min_it->second.begin(); it != min_it->second.end(); it++) {
+                            double q_diff = ((*it) - q).norm();
+                            if (q_diff < min_q) {
+                                min_q = q_diff;
+                            }
+                        }
+                        std::cout << "failure: " << min_diff << " " << min_q << std::endl;
+                    }
 
                     publishTransform(br, r_HAND_target, "effector_dest", "world");
                     loop_counter = 0;
@@ -861,8 +559,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                 sim->setTarget(r_HAND_target);
             }
             else if (mode == "random_start") {
-                if (loop_counter > 1500*10) {
-/*                    while (true) {
+                if (loop_counter > 1500*5) {
+                    while (true) {
                         generatePossiblePose(r_HAND_target, q, ndof, effector_name, col_model, kin_model);
                         sim->setState(q, dq, ddq);
                         sim->setTarget(r_HAND_target);
@@ -870,9 +568,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                         if (!sim->inCollision()) {
                             break;
                         }
-                    }*/
-                    sim->setState(q, dq, ddq);
-                    r_HAND_target = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.05, 0.0, 1.35));
+                    }
+                    r_HAND_target = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.95, 0.0, 1.35));
                     sim->setTarget(r_HAND_target);
                     loop_counter = 0;
                 }
@@ -925,7 +622,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                     var += norm * norm;
                 }
 //                std::cout << var << std::endl;
-                if (var < 0.0002) {
+                if (var < 0.001) {
                     KDL::Frame current_T_B_E;
                     kin_model->calculateFk(current_T_B_E, effector_name, q);
                     KDL::Twist diff = KDL::diff(r_HAND_target, current_T_B_E);
@@ -961,8 +658,10 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                     }
                     if (goal_reached) {
                         std::cout << "goal reached" << std::endl;
+                        success_list.push_back(std::make_pair(r_HAND_target, q_history));
                     } else {
                         std::cout << "could not reach goal" << std::endl;
+                        failure_list.push_back(std::make_pair(r_HAND_target, q_history));
                     }
                     getchar();
                     loop_counter = 100000;
