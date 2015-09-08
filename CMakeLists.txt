@@ -15,7 +15,7 @@ include_directories(${catkin_INCLUDE_DIRS} ${Eigen_INCLUDE_DIRS} ${USE_OROCOS_IN
 
 add_executable(test_velma_ompl src/test_ompl.cpp)
 add_executable(test_velma_sim src/velma_sim.cpp src/velma_dyn_model.cpp)
-add_executable(test_velma_sim_metric src/velma_sim_metric.cpp src/velma_dyn_model.cpp)
+add_executable(test_velma_sim_metric src/velma_sim_metric.cpp src/velma_dyn_model.cpp src/output_ikfast_velma_right.cpp)
 add_executable(test_velma_rrt src/velma_rrt.cpp src/velma_dyn_model.cpp)
 add_executable(test_velma_rrt2 src/velma_rrt2.cpp src/velma_dyn_model.cpp src/rrt.cpp)
 add_executable(test_velma_rrt3 src/velma_rrt3.cpp src/velma_dyn_model.cpp)

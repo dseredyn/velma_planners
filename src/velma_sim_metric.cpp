@@ -126,120 +126,6 @@ public:
         }
     }
 
-    void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback )
-    {
-        int_marker_pose_ = KDL::Frame(KDL::Rotation::Quaternion(feedback->pose.orientation.x, feedback->pose.orientation.y, feedback->pose.orientation.z, feedback->pose.orientation.w), KDL::Vector(feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z));
-//      ROS_INFO_STREAM( feedback->marker_name << " is now at "
-//          << feedback->pose.position.x << ", " << feedback->pose.position.y
-//          << ", " << feedback->pose.position.z );
-    }
-
-visualization_msgs::Marker makeBox( visualization_msgs::InteractiveMarker &msg )
-{
-  visualization_msgs::Marker marker;
-
-  marker.type = visualization_msgs::Marker::CUBE;
-  marker.scale.x = msg.scale * 0.05;
-  marker.scale.y = msg.scale * 0.05;
-  marker.scale.z = msg.scale * 0.05;
-  marker.color.r = 1.0;
-  marker.color.g = 1.0;
-  marker.color.b = 1.0;
-  marker.color.a = 1.0;
-
-  return marker;
-}
-
-visualization_msgs::InteractiveMarkerControl& makeBoxControl( visualization_msgs::InteractiveMarker &msg )
-{
-  visualization_msgs::InteractiveMarkerControl control;
-  control.always_visible = true;
-  control.markers.push_back( makeBox(msg) );
-  msg.controls.push_back( control );
-
-  return msg.controls.back();
-}
-
-void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool fixed, unsigned int interaction_mode, const KDL::Frame &T_W_M, bool show_6dof )
-{
-  visualization_msgs::InteractiveMarker int_marker;
-  int_marker.header.frame_id = "world";
-  tf::Vector3 pos(T_W_M.p.x(), T_W_M.p.y(), T_W_M.p.z());
-  double qx,qy,qz,qw;
-  T_W_M.M.GetQuaternion(qx,qy,qz,qw);
-  tf::Quaternion ori(qx,qy,qz,qw);
-  tf::Transform pose(ori, pos);
-  tf::poseTFToMsg(pose, int_marker.pose);
-  int_marker.scale = 0.2;
-
-  int_marker.name = "simple_6dof";
-  int_marker.description = "Simple 6-DOF Control";
-
-  // insert a box
-  makeBoxControl(int_marker);
-  int_marker.controls[0].interaction_mode = interaction_mode;
-
-  visualization_msgs::InteractiveMarkerControl control;
-
-  if ( fixed )
-  {
-    int_marker.name += "_fixed";
-    int_marker.description += "\n(fixed orientation)";
-    control.orientation_mode = visualization_msgs::InteractiveMarkerControl::FIXED;
-  }
-
-  if (interaction_mode != visualization_msgs::InteractiveMarkerControl::NONE)
-  {
-      std::string mode_text;
-      if( interaction_mode == visualization_msgs::InteractiveMarkerControl::MOVE_3D )         mode_text = "MOVE_3D";
-      if( interaction_mode == visualization_msgs::InteractiveMarkerControl::ROTATE_3D )       mode_text = "ROTATE_3D";
-      if( interaction_mode == visualization_msgs::InteractiveMarkerControl::MOVE_ROTATE_3D )  mode_text = "MOVE_ROTATE_3D";
-      int_marker.name += "_" + mode_text;
-      int_marker.description = std::string("3D Control") + (show_6dof ? " + 6-DOF controls" : "") + "\n" + mode_text;
-  }
-
-  if(show_6dof)
-  {
-    control.orientation.w = 1;
-    control.orientation.x = 1;
-    control.orientation.y = 0;
-    control.orientation.z = 0;
-    control.name = "rotate_x";
-    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-    int_marker.controls.push_back(control);
-    control.name = "move_x";
-    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-    int_marker.controls.push_back(control);
-
-    control.orientation.w = 1;
-    control.orientation.x = 0;
-    control.orientation.y = 1;
-    control.orientation.z = 0;
-    control.name = "rotate_z";
-    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-    int_marker.controls.push_back(control);
-    control.name = "move_z";
-    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-    int_marker.controls.push_back(control);
-
-    control.orientation.w = 1;
-    control.orientation.x = 0;
-    control.orientation.y = 0;
-    control.orientation.z = 1;
-    control.name = "rotate_y";
-    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-    int_marker.controls.push_back(control);
-    control.name = "move_y";
-    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-    int_marker.controls.push_back(control);
-  }
-
-  server.insert(int_marker);
-  server.setCallback(int_marker.name, boost::bind(&TestDynamicModel::processFeedback, this, _1) );
-//  if (interaction_mode != visualization_msgs::InteractiveMarkerControl::NONE)
-//    menu_handler.apply( server, int_marker.name );
-}
-
     bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
         // create dummy object
         boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.1, KDL::Frame(x));
@@ -286,121 +172,14 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         KDL::Vector gr;
         if (r_map->getGradient(F_a_b1.p, gr)) {
             diff.vel = gr * dist;
-            int m_id = 6000;
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + gr*0.3, 0, 0, 1, 1, 0.005, "world");
-//            markers_pub_.addEraseMarkers(m_id, m_id+300);
-            markers_pub_.publish();
-            ros::spinOnce();
+//            int m_id = 6000;
+//            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + gr*0.3, 0, 0, 1, 1, 0.005, "world");
+//            markers_pub_.publish();
+//            ros::spinOnce();
         }
 
 
         return diff;
-
-        KDL::Vector points_E[4] = {
-        KDL::Vector(0, 0, 0),
-        KDL::Vector(0, -0.13, 0.02),
-        KDL::Vector(0.03, 0.13, 0.02),
-        KDL::Vector(-0.03, 0.13, 0.02),
-        };
-
-        int m_id = 6000;
-
-        std::list<std::vector<ReachabilityMap::GradientInfo > > gradients_list;
-        for (int i=0; i<4; i++) {
-            KDL::Vector pt_W = F_a_b1 * points_E[i];
-            std::vector<ReachabilityMap::GradientInfo > gradients;
-            gradients.resize(27);
-            if (r_map->getAllGradients(pt_W, gradients)) {
-                gradients_list.push_back(gradients);
-            }
-        }
-
-        if (gradients_list.empty()) {
-            return diff;
-        }
-
-        bool valid_directions[27];
-        for (int i=0; i<27; i++) {
-            valid_directions[i] = true;
-        }
-
-        // AND all gradient directions
-        int max_restrictions = 0;
-        std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator max_restrictions_it = gradients_list.end(); 
-        int invalid_dirs = 0;
-        for (std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator it = gradients_list.begin(); it != gradients_list.end(); it++) {
-            int restrictions = 0;
-            for (int i=0; i<27; i++) {
-                if ( !(*it)[i].valid_ && valid_directions[i]) {
-                    valid_directions[i] = false;
-                    restrictions++;
-                    invalid_dirs++;
-                }
-            }
-            if (restrictions > max_restrictions) {
-                max_restrictions = restrictions;
-                max_restrictions_it = it;
-            }
-        }
-
-        if (max_restrictions_it != gradients_list.end()) {
-            double min_value = 10000.0;
-            KDL::Vector min_direction;
-            int min_direction_idx;
-            for (int i=0; i<27; i++) {
-                if ( valid_directions[i] ) {
-                    if (min_value > (*max_restrictions_it)[i].value_) {
-                        min_value = (*max_restrictions_it)[i].value_;
-                        min_direction = (*max_restrictions_it)[i].direction_;
-                        min_direction_idx = i;
-                    }
-                }
-            }
-
-            double dist = (F_a_b1.p - F_a_b2.p).Norm();
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + min_direction*0.2, 0, 0, 1, 1, 0.005, "world");
-            diff.vel = min_direction * dist;
-            return diff;
-        }
-        else {
-            // no restrictions
-            KDL::Vector mean_direction;
-            int pt_i = 0;
-            for (std::list<std::vector<ReachabilityMap::GradientInfo > >::const_iterator it = gradients_list.begin(); it != gradients_list.end(); it++) {
-                double min_value = 10000.0;
-                KDL::Vector min_direction;
-                int min_direction_idx;
-                for (int i=0; i<27; i++) {
-                    if ( valid_directions[i] ) {
-                        if (min_value > (*it)[i].value_) {
-                            min_value = (*it)[i].value_;
-                            min_direction = (*it)[i].direction_;
-                            min_direction_idx = i;
-                        }
-                    }
-                }
-
-                KDL::Vector pt_W = F_a_b1 * points_E[pt_i];
-                for (int i=0; i<27; i++) {
-                    if ((*it)[i].valid_) {
-                        if (min_direction_idx == i) {
-                            m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + (*it)[i].direction_*0.05, 1, 1, 1, 1, 0.005, "world");
-                        }
-                        else {
-                            m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + (*it)[i].direction_*0.05, 0, 0, 1, 1, 0.005, "world");
-                        }
-                    }
-                }
-
-                mean_direction += min_direction;
-                pt_i++;
-            }
-
-            double dist = (F_a_b1.p - F_a_b2.p).Norm();
-            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + mean_direction*0.2, 0, 0, 1, 1, 0.005, "world");
-            diff.vel = mean_direction * dist;
-            return diff;
-        }
     }
 
     void spin() {
@@ -428,28 +207,57 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         // the walls
         std::vector<KDL::Vector > vertices;
         std::vector<int > polygons;
-        generateBox(vertices, polygons, 0.2, 2.0, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(-0.65, 0.0, 1.3))) );
 
-        generateBox(vertices, polygons, 2.0, 0.2, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 1.0, 1.3))) );
+        KDL::Frame T_W_WALLS(KDL::Rotation::RotZ(0.0), KDL::Vector(0.4, 0, 0));
+        generateBox(vertices, polygons, 0.2, 2.0, 2.3);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.1, 0.0, 1.15))) );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(1.1, 0.0, 1.15))) );
 
-        generateBox(vertices, polygons, 2.0, 2.0, 0.2);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 0.0, 2.3))) );
+        generateBox(vertices, polygons, 2.2, 0.2, 2.3);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 1.0, 1.15))) );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, -1.0, 1.15))) );
+
+        generateBox(vertices, polygons, 2.2, 2.0, 0.2);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 0.0, 2.3))) );
+
+        // the door
+        KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
+        generateBox(vertices, polygons, 0.8, 0.1, 2.0);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR, "box 0.8 0.1 2.0") );
+        // the lock
+        KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
+        col_array.push_back( self_collision::createCollisionSphere(0.02, T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK) );
+        // the handle
+        KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
+        generateBox(vertices, polygons, 0.15, 0.05, 0.02);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR * T_DOOR_HANDLE, "box 0.15 0.05 0.02") );
+
+        // the bin
+        KDL::Frame T_W_BIN(KDL::Vector(0.2, -0.7, 0.5));
+        generateBox(vertices, polygons, 0.02, 0.3, 0.4);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.15, 0.0, 0.2)), "box 0.02 0.3 0.4") );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(-0.15, 0.0, 0.2)), "box 0.02 0.3 0.4") );
+
+        generateBox(vertices, polygons, 0.3, 0.02, 0.4);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.15, 0.2)), "box 0.3 0.02 0.4") );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, -0.15, 0.2)), "box 0.3 0.02 0.4") );
+
+        generateBox(vertices, polygons, 0.3, 0.3, 0.02);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.0, 0.0)), "box 0.3 0.3 0.02") );
 
         // the cabinet
         KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
         generateBox(vertices, polygons, 0.4, 0.6, 0.02);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.0))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.3))) );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3)), "box 0.4 0.6 0.02") );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.0)), "box 0.4 0.6 0.02") );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.3)), "box 0.4 0.6 0.02") );
 
         generateBox(vertices, polygons, 0.02, 0.6, 0.6);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0.2,0,0))) );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0.2,0,0)), "box 0.02 0.6 0.6") );
 
         generateBox(vertices, polygons, 0.4, 0.02, 0.6);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0))) );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0)), "box 0.4 0.02 0.6") );
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0)), "box 0.4 0.02 0.6") );
 
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
@@ -487,32 +295,29 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             ddq[q_idx] = 0.0;
             torque[q_idx] = 0.0;
         }
-//        q[0] = 1.2;
-        q[2] = 1.0;
 
         double init_q[15] = {
-        0.0,
-        120.0/180.0*PI,
-        -90.0/180.0*PI,
-        110.0/180.0*PI,
-        140.0/180.0*PI,
-        0.0/180.0*PI,
-        -40.0/180.0*PI,
-        0.0/180.0*PI,
-        90.0/180.0*PI,
-        90.0/180.0*PI,
-        -90.0/180.0*PI,
-        -90.0/180.0*PI,
-        0.0/180.0*PI,
-        90.0/180.0*PI,
-        -90.0/180.0*PI,
+        0.0,                // torso_0_joint
+        90.0/180.0*PI,      // right_arm_0_joint
+        -90.0/180.0*PI,     // right_arm_1_joint
+        110.0/180.0*PI,     // right_arm_2_joint
+        120.0/180.0*PI,     // right_arm_3_joint
+        0.0/180.0*PI,       // right_arm_4_joint
+        -40.0/180.0*PI,     // right_arm_5_joint
+        0.0/180.0*PI,       // right_arm_6_joint
+        90.0/180.0*PI,      // left_arm_0_joint
+        90.0/180.0*PI,      // left_arm_1_joint
+        -90.0/180.0*PI,     // left_arm_2_joint
+        -90.0/180.0*PI,     // left_arm_3_joint
+        0.0/180.0*PI,       // left_arm_4_joint
+        90.0/180.0*PI,      // left_arm_5_joint
+        -90.0/180.0*PI,     // left_arm_6_joint
         };
 
         for (int q_idx = 0; q_idx < ndof; q_idx++) {
             q_eq(q_idx) = init_q[q_idx];
+            q(q_idx) = init_q[q_idx];
         }
-
-        q = q_eq;
 
         std::string effector_name = "right_HandGripLink";
         int effector_idx = col_model->getLinkIndex(effector_name);
@@ -532,7 +337,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
 
-//        kin_model->setUpperLimit(1, -5.0/180.0*PI);
+        kin_model->setLowerLimit(0, -110.0/180.0*PI);
+        kin_model->setUpperLimit(0, 110.0/180.0*PI);
         kin_model->setUpperLimit(2, -5.0/180.0*PI);
         kin_model->setLowerLimit(4, 5.0/180.0*PI);
         kin_model->setUpperLimit(6, -5.0/180.0*PI);
@@ -559,23 +365,12 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         KDL::Frame r_HAND_target;
         int loop_counter = 50000;
         ros::Rate loop_rate(500);
-/*
-        while (true) {
-            generatePossiblePose(r_HAND_target, q, ndof, effector_name, col_model, kin_model);
-            sim->setState(q, dq, ddq);
-            sim->setTarget(r_HAND_target);
-            sim->oneStep();
-            if (!sim->inCollision()) {
-                break;
-            }
-        }
-*/
+
         // TEST: distance map
         boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.025, 3));
 
-
-        KDL::Vector lower_bound(0.5, -1.4, 0.8);
-        KDL::Vector upper_bound(2.0, 1.4, 2.3);
+        KDL::Vector lower_bound(0.0, -0.9, 0.3);
+        KDL::Vector upper_bound(1.5, 0.9, 2.2);
         if (!r_map->createDistanceMap(KDL::Vector(1.05, 0.0, 1.35), boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
             std::cout << "could not create the distance map" << std::endl;
         }
@@ -583,20 +378,20 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             std::cout << "created distance map" << std::endl;
         }
 
-//        return;
         sim->updateMetric( boost::bind(&TestDynamicModel::distanceMetric, this, _1, _2, r_map) );
 
 
 /*
+        double z = 1.2;
         while (ros::ok()) {
             int m_id = 0;
 
-            for (double x = lower_bound(0)-0.1; x < upper_bound(0)+0.1; x += 0.025) {
-//                break;
-                {
-                    double y = 0.0;
-//                for (double y = lower_bound(1)+0.2; y < upper_bound(1)-0.5; y += 0.025) {
-                    for (double z = lower_bound(2)+0.1; z < upper_bound(2)-0.4; z += 0.025)
+            z += 0.025;
+            for (double x = lower_bound(0)+0.0125; x < upper_bound(0); x += 0.025) {
+//                {
+//                    double y = 0.0;
+                for (double y = lower_bound(1)+0.0125; y < upper_bound(1); y += 0.025) {
+//                    for (double z = lower_bound(2)+0.0125; z < upper_bound(2); z += 0.025)
                     {
 //                        double z = 1.4;
                         KDL::Vector pt_W(x,y,z);
@@ -673,7 +468,7 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                 kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
             }
 
-            m_id = 5000;
+            m_id = 15000;
             m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
             markers_pub_.publish();
             markers_pub_.publish();
@@ -689,19 +484,6 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
 //*/
 
         int_marker_pose_ = r_HAND_target;
-        // create an interactive marker server on the topic namespace simple_marker
-        interactive_markers::InteractiveMarkerServer server("simple_marker");
-        tf::Vector3 position;
-        position = tf::Vector3( 0, 0, 0);
-        make6DofMarker(server, false, visualization_msgs::InteractiveMarkerControl::MOVE_ROTATE_3D, r_HAND_target, true);
-        // 'commit' changes and send to all clients
-        server.applyChanges();
-
-        int s_idx = 5;
-
-//        std::string mode = "random_dest";
-//        std::string mode = "marker_dest";
-        std::string mode = "random_start";
 
         ros::Duration(1.0).sleep();
 
@@ -709,51 +491,19 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         std::list<Eigen::VectorXd > q_history;
         bool collision_in_prev_step = false;
         bool stop = false;
-        int pose_switch = 0;
         while (ros::ok() && !stop) {
 
-            if (mode == "random_dest") {
-                if (loop_counter > 1500*10) {
-                    sim->getState(q, dq, ddq);
-                    std::cout << "q: " << q.transpose() << std::endl;
-                    std::cout << "dq: " << dq.transpose() << std::endl;
-
-                    Eigen::VectorXd q_tmp(ndof);
-                    generatePossiblePose(r_HAND_target, q_tmp, ndof, effector_name, col_model, kin_model);
-
-                    sim->setTarget(r_HAND_target);
-
-                    publishTransform(br, r_HAND_target, "effector_dest", "world");
-                    loop_counter = 0;
-                }
-                loop_counter += 1;
-            }
-            else if (mode == "marker_dest") {
-                r_HAND_target = int_marker_pose_;
-                sim->setTarget(r_HAND_target);
-            }
-            else if (mode == "random_start") {
-                if (loop_counter > 1500*2) {
-/*                    while (true) {
-                        generatePossiblePose(r_HAND_target, q, ndof, effector_name, col_model, kin_model);
-                        sim->setState(q, dq, ddq);
-                        sim->setTarget(r_HAND_target);
-                        sim->oneStep();
-                        if (!sim->inCollision()) {
-                            break;
-                        }
-                    }*/
+            if (loop_counter > 1500*2) {
                     sim->setState(q, dq, ddq);
-                    double rand01 = randomUniform(0,1);
-/*                    if (pose_switch%2 == 0) {
-                        rand01 = 0.3;
+                    double rand01 = randomUniform(0, 2.2);
+
+                    if (rand01 > 1.2) {
+                        r_HAND_target = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK * KDL::Frame(KDL::Rotation::RotZ(90.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.0, -0.1, 0.0));
                     }
-                    else {
-                        rand01 = 0.7;
+                    else if (rand01 > 1.0) {
+                        r_HAND_target = T_W_BIN * KDL::Frame(KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
                     }
-                    pose_switch++;
-*/
-                    if (rand01 > 0.8) {
+                    else if (rand01 > 0.8) {
                         r_HAND_target = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.05, 0.0, 1.35+0.3));
                     }
                     else if (rand01 > 0.6){
@@ -770,8 +520,6 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                     }
                     sim->setTarget(r_HAND_target);
 
-//                    KDL::Vector lower_bound(0.5, -1.0, 0.8);
-//                    KDL::Vector upper_bound(2.0, 1.0, 2.3);
                     if (!r_map->createDistanceMap(r_HAND_target.p, boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
                         std::cout << "could not create the distance map" << std::endl;
                     }
@@ -780,27 +528,16 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
                     }
 
                     loop_counter = 0;
-                }
-                loop_counter += 1;
             }
+            loop_counter += 1;
             publishTransform(br, r_HAND_target, "effector_dest", "world");
-/*
-            const double q_tab[] = {0.932977, 2.23176, -0.444369, 1.51863, -0.149273, 2.02303, -0.0241965, 0.556891, 2.08885, -1.81702, 1.55818, 0.30735, 0.192247, 1.24464, -0.572893};
-            for (int q_idx = 0; q_idx < ndof; q_idx++) {
-                q(q_idx) = q_tab[q_idx];
-            }
-            sim->setState(q, dq, ddq);
 
-            std::cout << "*" << std::endl;
-            std::cout << "*" << std::endl;
-            std::cout << "*" << std::endl;
-*/
             sim->oneStep(&markers_pub_, 3000);
             if (sim->inCollision() && !collision_in_prev_step) {
                 collision_in_prev_step = true;
                 std::cout << "collision begin" << std::endl;
                 printJointLimits(q, kin_model, joint_names);
-                stop = true;
+//                stop = true;
             }
             else if (!sim->inCollision() && collision_in_prev_step) {
                 collision_in_prev_step = false;
@@ -855,7 +592,6 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
             }
 
             
-//            std::cout << "q: " << q.transpose() << std::endl;
 
             // publish markers and robot state with limited rate
             ros::Duration time_elapsed = ros::Time::now() - last_time;
