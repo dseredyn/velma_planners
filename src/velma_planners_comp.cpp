@@ -34,7 +34,7 @@
 #include <sensor_msgs/JointState.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <tf/transform_broadcaster.h>
-#include <boost/bind.hpp>
+#include <interactive_markers/interactive_marker_server.h>
 
 #include <string>
 #include <stdlib.h>
@@ -43,16 +43,98 @@
 #include "Eigen/Dense"
 #include "Eigen/LU"
 
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/base/SpaceInformation.h>
+#include <ompl/base/State.h>
+#include <ompl/base/ScopedState.h>
+#include <ompl/base/Path.h>
+#include <ompl/base/goals/GoalState.h>
+#include <ompl/base/ProblemDefinition.h>
+#include <ompl/geometric/planners/rrt/RRTstar.h>
+#include <ompl/geometric/planners/rrt/RRTConnect.h>
+#include <ompl/geometric/planners/rrt/LBTRRT.h>
+
 #include "velma_dyn_model.h"
 #include <collision_convex_model/collision_convex_model.h>
 #include "kin_model/kin_model.h"
 #include "planer_utils/marker_publisher.h"
-#include "planer_utils/utilities.h"
+#include "planer_utils/task_col.h"
+#include "planer_utils/task_hand.h"
+#include "planer_utils/task_jlc.h"
+#include "planer_utils/task_wcc.h"
 #include "planer_utils/random_uniform.h"
-#include "planer_utils/reachability_map.h"
-#include "planer_utils/rrt_star.h"
+#include "planer_utils/utilities.h"
 #include "planer_utils/simulator.h"
-#include "rrt.h"
+#include "planer_utils/reachability_map.h"
+
+#include "experiments_utilities.h"
+
+void stateOmplToEigen(const ompl::base::State *s, Eigen::VectorXd &x, int ndof) {
+    for (int q_idx = 0; q_idx < ndof; q_idx++) {
+        x(q_idx) = s->as<ompl::base::RealVectorStateSpace::StateType >()->operator[](q_idx);
+    }
+}
+
+void stateEigenToOmpl(const Eigen::VectorXd &x, ompl::base::State *s, int ndof) {
+    for (int q_idx = 0; q_idx < ndof; q_idx++) {
+        s->as<ompl::base::RealVectorStateSpace::StateType >()->operator[](q_idx) = x(q_idx);
+    }
+}
+
+class VelmaRightGripperIkGoal : public ompl::base::GoalSampleableRegion {
+public:
+
+//const boost::shared_ptr<self_collision::CollisionModel> &col_model, const boost::shared_ptr<KinematicModel> &kin_model
+
+    VelmaRightGripperIkGoal(const ompl::base::SpaceInformationPtr &si, const KDL::Frame &T_W_G_dest,
+                            const boost::shared_ptr<KinematicModel> &kin_model, const std::string &effector_name,
+                            const ompl::base::StateValidityCheckerFn &svc) :
+        GoalSampleableRegion(si),
+        T_W_G_dest_(T_W_G_dest),
+        kin_model_(kin_model),
+        ndof_(kin_model_->getDofCount()),
+        effector_name_(effector_name),
+        svc_(svc)
+    {
+    }
+
+    virtual void sampleGoal (ompl::base::State *st) const {
+        Eigen::VectorXd ik_q( ndof_ );
+        while (true) {
+            if (randomizedIkSolution(kin_model_, T_W_G_dest_, ik_q)) {
+                stateEigenToOmpl(ik_q, st, ndof_);
+                if (svc_(st)){
+                    //std::cout << "found ik solution" << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+
+    virtual unsigned int maxSampleCount () const {
+        return 1000000;
+    }
+
+    virtual bool couldSample () const {
+        return true;
+    }
+
+    virtual double distanceGoal (const ompl::base::State *st) const {
+        Eigen::VectorXd q(ndof_);
+        stateOmplToEigen(st, q, ndof_);
+        KDL::Frame T_W_G;
+        kin_model_->calculateFk(T_W_G, effector_name_, q);
+        KDL::Twist diff = KDL::diff(T_W_G, T_W_G_dest_, 1.0);
+        return diff.vel.Norm() + diff.rot.Norm();
+    }
+
+protected:
+    KDL::Frame T_W_G_dest_;
+    const boost::shared_ptr<KinematicModel> &kin_model_;
+    int ndof_;
+    std::string effector_name_;
+    ompl::base::StateValidityCheckerFn svc_;
+};
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -61,8 +143,6 @@ class TestDynamicModel {
     tf::TransformBroadcaster br;
 
     const double PI;
-
-    std::list<Eigen::VectorXd > penalty_points_;
 
 public:
     TestDynamicModel() :
@@ -76,52 +156,8 @@ public:
     ~TestDynamicModel() {
     }
 
-    double costLine(const Eigen::VectorXd &x1, const Eigen::VectorXd &x2, const boost::shared_ptr<ReachabilityMap > &r_map) const {
-        return (x1-x2).norm() * (2.0 - r_map->getValue(x1) - r_map->getValue(x2));
-    }
-
-    double costLine2(const Eigen::VectorXd &x1, const Eigen::VectorXd &x2, const boost::shared_ptr<ReachabilityMap > &r_map) const {
-        Eigen::VectorXd v = x2-x1;
-        double norm = v.norm();
-        double step_len = 0.05;
-
-        if (r_map->getMaxValue() == 0.0) {
-            return 1.0 * norm;
-        }
-        return ((r_map->getMaxValue() * r_map->getValue((x1+x2)/2.0)) + 1.0) * norm;
-    }
-
-    bool checkCollision(const Eigen::VectorXd &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
-        // create dummy object
-        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.1, KDL::Frame(KDL::Vector(x[0], x[1], x[2])));
-        KDL::Frame T_B_L1;
-        KDL::Frame T_B_L2;
-        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2);
-        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-
-        return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2) || self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-    }
-
-    bool checkCollision2(const KDL::Frame &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
-        // create dummy object
-        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.1, x);
-        KDL::Frame T_B_L1;
-        KDL::Frame T_B_L2;
-        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2);
-        self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-
-        return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("torso_base")), T_B_L2) || self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-    }
-
-    void sampleSpace(KDL::Frame &x, const Eigen::VectorXd &lower_bound, const Eigen::VectorXd &upper_bound) {
-        Eigen::VectorXd quat(4);
-        randomUnitQuaternion(quat);
-        x = KDL::Frame( KDL::Rotation::Quaternion(quat(0), quat(1), quat(2), quat(3)), KDL::Vector(randomUniform(lower_bound(0), upper_bound(0)), randomUniform(lower_bound(1), upper_bound(1)), randomUniform(lower_bound(2), upper_bound(2))) );
-    }
-
     void generatePossiblePose(KDL::Frame &T_B_E, Eigen::VectorXd &q, int ndof, const std::string &effector_name, const boost::shared_ptr<self_collision::CollisionModel> &col_model, const boost::shared_ptr<KinematicModel> &kin_model) {
         while (true) {
-//            Eigen::VectorXd q(ndof);
             for (int q_idx = 0; q_idx < ndof; q_idx++) {
                 q(q_idx) = randomUniform(kin_model->getLowerLimit(q_idx), kin_model->getUpperLimit(q_idx));
             }
@@ -139,37 +175,85 @@ public:
         }
     }
 
-    void generateBox(std::vector<KDL::Vector > &vertices, std::vector<int> &polygons, double size_x, double size_y, double size_z) {
-        vertices.clear();
-        polygons.clear();
-        const int poly[] = {
-        4, 0, 1, 2, 3,
-        4, 4, 7, 6, 5,
-        4, 0, 4, 5, 1,
-        4, 3, 2, 6, 7,
-        4, 5, 6, 2, 1,
-        4, 0, 3, 7, 4,
-        };
-        const double vert[] = {
-        0.5, -0.5, 0.5,
-        0.5, 0.5, 0.5,
-        -0.5, 0.5, 0.5,
-        -0.5, -0.5, 0.5,
-        0.5, -0.5, -0.5,
-        0.5, 0.5, -0.5,
-        -0.5, 0.5, -0.5,
-        -0.5, -0.5, -0.5,
-        };
-        for (int i=0; i<8; i++) {
-            vertices.push_back(KDL::Vector(vert[i*3]*size_x, vert[i*3+1]*size_y, vert[i*3+2]*size_z));
+    bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
+        // create dummy object
+        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.07, KDL::Frame(x));
+        KDL::Frame T_B_L1;
+        KDL::Frame T_B_L2;
+        return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
+    }
+
+    void printJointLimits(const Eigen::VectorXd &q, const boost::shared_ptr<KinematicModel> &kin_model, const std::vector<std::string> &joint_names) const {
+                    int ndof = q.innerSize();
+                    for (int q_idx = 0; q_idx < ndof; q_idx++) {
+                        double lo = kin_model->getLowerLimit(q_idx), up = kin_model->getUpperLimit(q_idx);
+                        double f = (q(q_idx) - lo) / (up - lo);
+                        int steps = 50;
+                        int step = static_cast<int >(f*steps);
+                        if (step >= steps) {
+                            step = steps-1;
+                        }
+                        for (int s = 0; s < steps; s++) {
+                            std::cout << ((s == step)?"*":".");
+                        }
+                        std::cout << "  ";
+
+                        steps = 3;
+                        step = static_cast<int >(f*steps);
+                        if (step >= steps) {
+                            step = steps-1;
+                        }
+                        for (int s = 0; s < steps; s++) {
+                            std::cout << ((s == step)?"*":".");
+                        }
+
+                        std::cout << "    " << joint_names[q_idx] << std::endl;
+                    }
+    }
+
+    KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map) const {
+        KDL::Twist diff = KDL::diff(F_a_b1, F_a_b2, 1.0);
+        if (diff.vel.Norm() < 0.05) {
+            return diff;
         }
-        for (int i=0; i<6*5; i++) {
-            polygons.push_back(poly[i]);
+
+        double dist = (F_a_b1.p - F_a_b2.p).Norm();
+        KDL::Vector gr;
+        if (r_map->getGradient(F_a_b1.p, gr)) {
+            diff.vel = gr * dist;
+//            int m_id = 6000;
+//            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + gr*0.3, 0, 0, 1, 1, 0.005, "world");
+//            markers_pub_.publish();
+//            ros::spinOnce();
         }
+
+
+        return diff;
+    }
+
+    bool isStateValid(const ompl::base::State *s, const boost::shared_ptr<self_collision::CollisionModel > &col_model,
+                        const boost::shared_ptr<KinematicModel > &kin_model, int ndof, const VelmaQ5Q6CollisionChecker &wcc1,
+                        const VelmaQ5Q6CollisionChecker &wcc2) {
+        Eigen::VectorXd x(ndof);
+        stateOmplToEigen(s, x, ndof);
+
+        // check collision in wrists
+        if (wcc1.inCollision(x) || wcc2.inCollision(x)) {
+            return false;
+        }
+
+        std::vector<self_collision::CollisionInfo> link_collisions;
+        std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
+        // calculate forward kinematics for all links
+        for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+            kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), x);
+        }
+
+        std::set<int> excluded_link_idx;
+        return !self_collision::checkCollision(col_model, links_fk, excluded_link_idx);
     }
 
     void spin() {
-
         // initialize random seed
         srand(time(NULL));
 
@@ -191,37 +275,17 @@ public:
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
 
-        // the walls
-        std::vector<KDL::Vector > vertices;
-        std::vector<int > polygons;
-        generateBox(vertices, polygons, 0.2, 2.0, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(-0.65, 0.0, 1.3))) );
-
-        generateBox(vertices, polygons, 2.0, 0.2, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 1.0, 1.3))) );
-
-        generateBox(vertices, polygons, 2.0, 2.0, 0.2);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, KDL::Frame(KDL::Vector(0.35, 0.0, 2.3))) );
-
-        // the cabinet
-        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
-        generateBox(vertices, polygons, 0.4, 0.6, 0.02);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.0))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.3))) );
-
-        generateBox(vertices, polygons, 0.02, 0.6, 0.6);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0.2,0,0))) );
-
-        generateBox(vertices, polygons, 0.4, 0.02, 0.6);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0))) );
+        KDL::Frame T_W_LOCK, T_W_BIN;
+        createEnvironment(col_array, T_W_LOCK, T_W_BIN);
 
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
         }
         col_model->generateCollisionPairs();
+
+        VelmaQ5Q6CollisionChecker wrist_cc_r(6, 7, 0.2, false);
+        VelmaQ5Q6CollisionChecker wrist_cc_l(13, 14, 0.2, true);
 
         //
         // robot state
@@ -245,21 +309,39 @@ public:
 
         int ndof = joint_names.size();
 
-        Eigen::VectorXd saved_q(ndof), saved_dq(ndof), saved_ddq(ndof);
-        saved_q.resize( ndof );
-        saved_dq.resize( ndof );
-        saved_ddq.resize( ndof );
-
+        Eigen::VectorXd q_eq(ndof);
+        Eigen::VectorXd q(ndof), dq(ndof), ddq(ndof), torque(ndof);
         for (int q_idx = 0; q_idx < ndof; q_idx++) {
-            saved_q[q_idx] = -0.5;
-            saved_dq[q_idx] = 0.0;
-            saved_ddq[q_idx] = 0.0;
+            q[q_idx] = 0.5;
+            dq[q_idx] = 0.0;
+            ddq[q_idx] = 0.0;
+            torque[q_idx] = 0.0;
         }
 
-        saved_q[2] = 1.0;
-//        saved_q[11] = -1.5;
+        double init_q[15] = {
+        0.0,                // torso_0_joint
+        90.0/180.0*PI,      // right_arm_0_joint
+        -90.0/180.0*PI,     // right_arm_1_joint
+        90.0/180.0*PI,     // right_arm_2_joint
+        90.0/180.0*PI,     // right_arm_3_joint
+        0.0/180.0*PI,       // right_arm_4_joint
+        -40.0/180.0*PI,     // right_arm_5_joint
+        0.0/180.0*PI,       // right_arm_6_joint
+        90.0/180.0*PI,      // left_arm_0_joint
+        90.0/180.0*PI,      // left_arm_1_joint
+        -90.0/180.0*PI,     // left_arm_2_joint
+        -90.0/180.0*PI,     // left_arm_3_joint
+        0.0/180.0*PI,       // left_arm_4_joint
+        90.0/180.0*PI,      // left_arm_5_joint
+        -90.0/180.0*PI,     // left_arm_6_joint
+        };
 
-        std::string effector_name = "right_HandPalmLink";
+        for (int q_idx = 0; q_idx < ndof; q_idx++) {
+            q_eq(q_idx) = init_q[q_idx];
+            q(q_idx) = init_q[q_idx];
+        }
+
+        std::string effector_name = "right_HandGripLink";
         int effector_idx = col_model->getLinkIndex(effector_name);
 
         //
@@ -267,27 +349,26 @@ public:
         //
         boost::shared_ptr<KinematicModel > kin_model( new KinematicModel(robot_description_str, joint_names) );
         kin_model->setIgnoredJointValue("torso_1_joint", -90.0/180.0*PI);
+        kin_model->setIgnoredJointValue("right_HandFingerOneKnuckleTwoJoint", 120.0/180.0*PI);
+        kin_model->setIgnoredJointValue("right_HandFingerTwoKnuckleTwoJoint", 120.0/180.0*PI);
+        kin_model->setIgnoredJointValue("right_HandFingerThreeKnuckleTwoJoint", 120.0/180.0*PI);
+        kin_model->setIgnoredJointValue("right_HandFingerOneKnuckleThreeJoint", 40.0/180.0*PI);
+        kin_model->setIgnoredJointValue("right_HandFingerTwoKnuckleThreeJoint", 40.0/180.0*PI);
+        kin_model->setIgnoredJointValue("right_HandFingerThreeKnuckleThreeJoint", 40.0/180.0*PI);
         Eigen::VectorXd ign_q;
         std::vector<std::string > ign_joint_names;
         kin_model->getIgnoredJoints(ign_q, ign_joint_names);
 
-//        kin_model->setUpperLimit(2, -10.0/180.0*PI);
-//        kin_model->setLowerLimit(2, 10.0/180.0*PI);
-//        kin_model->setLowerLimit(4, 10.0/180.0*PI);
-//        kin_model->setUpperLimit(6, -10.0/180.0*PI);
+        kin_model->setLowerLimit(0, -110.0/180.0*PI);
+        kin_model->setUpperLimit(0, 110.0/180.0*PI);
+        kin_model->setUpperLimit(2, -5.0/180.0*PI);
+        kin_model->setLowerLimit(4, 5.0/180.0*PI);
+        kin_model->setUpperLimit(6, -5.0/180.0*PI);
+        kin_model->setLowerLimit(9, 5.0/180.0*PI);
+        kin_model->setUpperLimit(11, -5.0/180.0*PI);
+        kin_model->setLowerLimit(13, 5.0/180.0*PI);
 
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
-
-        ros::Duration(1.0).sleep();
-
-        Eigen::VectorXd lower_bound(3);
-        Eigen::VectorXd upper_bound(3);
-        lower_bound(0) = -0.2;
-        upper_bound(0) = 1.3;
-        lower_bound(1) = -1.0;
-        upper_bound(1) = 1.0;
-        lower_bound(2) = 1.0;
-        upper_bound(2) = 2.0;
 
         Eigen::VectorXd max_q(ndof);
         max_q(0) = 10.0/180.0*PI;               // torso_0_joint
@@ -299,113 +380,341 @@ public:
         max_q(6) = max_q(13) = 50.0/180.0*PI;   // arm_5_joint
         max_q(7) = max_q(14) = 50.0/180.0*PI;   // arm_6_joint
 
-        boost::shared_ptr<DynamicsSimulatorHandPose> sim( new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, max_q) );
-        sim->setState(saved_q, saved_dq, saved_ddq);
-
-        RRT rrt(ndof, boost::bind(&TestDynamicModel::checkCollision2, this, _1, col_model),
-//                boost::bind(&TestDynamicModel::generatePossiblePose, this, _1, ndof, effector_name, col_model, kin_model),
-                boost::bind(&TestDynamicModel::sampleSpace, this, _1, lower_bound, upper_bound),
-                0.05, 0.5, 0.8, kin_model, effector_name, sim);
+        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, q_eq, 10000.0*max_q ) );
 
         // loop variables
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
-        ros::Rate loop_rate(100);
+        int loop_counter = 50000;
+        ros::Rate loop_rate(500);
 
-/*
-        while (ros::ok()) {
-            // calculate forward kinematics for all links
-            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), saved_q);
-            }
-            r_HAND_target = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.85, 0.0, 1.35));
-            publishTransform(br, r_HAND_target, "effector_dest", "world");
+//        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.025, 3));
+        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.04, 3));
 
-            publishJointState(joint_state_pub_, saved_q, joint_names, ign_q, ign_joint_names);
-            int m_id = 0;
-            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
-            markers_pub_.publish();
-            ros::spinOnce();
-            loop_rate.sleep();
+        KDL::Vector lower_bound(0.0, -0.9, 0.3);
+        KDL::Vector upper_bound(1.5, 0.9, 2.2);
+        if (!r_map->createDistanceMap(KDL::Vector(1.05, 0.0, 1.35), boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
+            std::cout << "could not create the distance map" << std::endl;
+        }
+        else {
+//            std::cout << "created distance map" << std::endl;
         }
 
-        return;
-//*/
+        sim->updateMetric( boost::bind(&TestDynamicModel::distanceMetric, this, _1, _2, r_map) );
 
-        while (ros::ok()) {
+        ros::Duration(1.0).sleep();
 
-            // generate valid starting pose
-            while (true) {
-                generatePossiblePose(r_HAND_target, saved_q, ndof, effector_name, col_model, kin_model);
-                saved_dq.setZero();
-                saved_ddq.setZero();
-                sim->setState(saved_q, saved_dq, saved_ddq);
-                sim->setTarget(r_HAND_target);
-                sim->oneStep();
-                if (!sim->inCollision()) {
-                    break;
-                }
-            }
-            std::cout << saved_q.transpose() << " ";
+        // add tests
+        KDL::Frame T_W_G_lock = T_W_LOCK * KDL::Frame(KDL::Rotation::RotZ(90.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.0, -0.11, 0.0));
+        KDL::Frame T_W_G_bin1 = T_W_BIN * KDL::Frame(KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
+        KDL::Frame T_W_G_bin2 = T_W_BIN * KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
+        KDL::Frame T_W_G_cab1 = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.05, 0.0, 1.35+0.3));
+        KDL::Frame T_W_G_cab2 = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.05, 0.0, 1.35));
+        KDL::Frame T_W_G_cab3 = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.15, -0.5, 1.35));
+        KDL::Frame T_W_G_cab4 = KDL::Frame(KDL::Rotation::RotY(45.0/180.0*PI), KDL::Vector(1.05, 0, 2.0));
+        KDL::Frame T_W_G_cab5 = KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.8, 0.6, 1.8));
+        KDL::Frame T_W_G_weird = KDL::Frame(KDL::Vector(0.7, -0.6, 1.8));
 
-            int successes = 0;
-            // try n times to find the path to goal
-            for (int try_idx=0; try_idx<5; try_idx++) {
-                Eigen::VectorXd q_tmp(ndof);
-                generatePossiblePose(r_HAND_target, q_tmp, ndof, effector_name, col_model, kin_model);
-                r_HAND_target = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.00, 0.0, 1.34));
-                publishTransform(br, r_HAND_target, "effector_dest", "world");
+        TestScenario ts;
+        // single movements from the same configuration
+        ts.addNode(T_W_G_weird, q_eq, false);
+        ts.addNode(T_W_G_lock, q_eq, false);
+        ts.addNode(T_W_G_bin1, q_eq, false);
+        ts.addNode(T_W_G_bin2, q_eq, false);
+        ts.addNode(T_W_G_cab1, q_eq, false);
+        ts.addNode(T_W_G_cab2, q_eq, false);
+        ts.addNode(T_W_G_cab3, q_eq, false);
+        ts.addNode(T_W_G_cab4, q_eq, false);
+        ts.addNode(T_W_G_cab5, q_eq, false);
 
-                // get the current pose
-                sim->setState(saved_q, saved_dq, saved_ddq);
+        // sequence of movements
+        ts.addNode(T_W_G_lock, q_eq, false);
+        ts.addNode(T_W_G_bin1, q_eq, true);
+        ts.addNode(T_W_G_bin2, q_eq, true);
+        ts.addNode(T_W_G_lock, q_eq, true);
+        ts.addNode(T_W_G_cab1, q_eq, true);
+        ts.addNode(T_W_G_cab2, q_eq, true);
+        ts.addNode(T_W_G_cab3, q_eq, true);
+        ts.addNode(T_W_G_cab5, q_eq, true);
+        ts.addNode(T_W_G_cab2, q_eq, true);
+        ts.addNode(T_W_G_cab4, q_eq, true);
 
-                // calculate forward kinematics for all links
-                for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                    kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), saved_q);
-                }
-                publishJointState(joint_state_pub_, saved_q, joint_names, ign_q, ign_joint_names);
-                int m_id = 1000;
-                m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
-                markers_pub_.publish();
-                ros::spinOnce();
+        TestResults tr;
 
-                std::list<KDL::Frame > path_x;
-                std::list<Eigen::VectorXd > path_q;
-                rrt.plan(saved_q, r_HAND_target, 0.05, &path_x, &path_q, markers_pub_);
+        std::vector<std::string > planner_names;
+        planner_names.push_back("sim");
+        planner_names.push_back("RRT*");
+        planner_names.push_back("RRT-Connect");
 
-                if (path_x.size() > 0) {
-                    successes++;
-                    double path_length = getPathLength(path_q);
+        double rrt_max_time = 100.0;
 
-//                    std::cout << "planning ended x: " << path_x.size() << "  q: " << path_q.size() << "  lq: " << path_length << std::endl;
-/*
-                    for (double d = 0.0; d < 1.0; d += 0.01/path_length) {
-                        Eigen::VectorXd q(ndof);
-                        getPointOnPath(path_q, d, q);
-                        saved_q = q;
-                        // calculate forward kinematics for all links
-                        for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                            kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
+        for (int planner_idx = 0; planner_idx < planner_names.size(); planner_idx++) {
+            std::string planner_name = planner_names[planner_idx];
+            std::cout << "planner_name: " << planner_name << std::endl;
+
+            for (int try_idx = 0; try_idx < 20; try_idx++) {
+                std::cout << "try_idx: " << try_idx << std::endl;
+                //
+                // OMPL RRT
+                //
+                if (planner_name == "RRT*" || planner_name == "RRT-Connect") {
+                    // joint limits
+                    Eigen::VectorXd lower_limit(ndof), upper_limit(ndof);
+                    {
+                        int q_idx = 0;
+                        for (std::vector<std::string >::const_iterator name_it = joint_names.begin(); name_it != joint_names.end(); name_it++, q_idx++) {
+                            lower_limit(q_idx) = kin_model->getLowerLimit(q_idx);
+                            upper_limit(q_idx) = kin_model->getUpperLimit(q_idx);
+//                            std::cout << lower_limit(q_idx) << "  "  << q(q_idx) << "  " << upper_limit(q_idx) << std::endl;
                         }
-                        publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
-                        int m_id = 1000;
-                        m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
-                        markers_pub_.publish();
-                        ros::spinOnce();
-                        loop_rate.sleep();
                     }
-*/
-                }
 
-    //                getchar();
-                markers_pub_.addEraseMarkers( 0, 2000);
-                markers_pub_.publish();
-                ros::spinOnce();
+                    ompl::base::StateSpacePtr space(new ompl::base::RealVectorStateSpace());
+                    for (int q_idx = 0; q_idx < ndof; q_idx++) {
+                        space->as<ompl::base::RealVectorStateSpace>()->addDimension(joint_names[q_idx], lower_limit(q_idx), upper_limit(q_idx));
+                    }
+
+                    ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
+                    si->setStateValidityChecker( boost::bind(&TestDynamicModel::isStateValid, this, _1, col_model, kin_model, ndof, wrist_cc_r, wrist_cc_l) );
+                    si->setStateValidityCheckingResolution(0.003);
+                    si->setup();
+
+                    ts.startTest();
+
+                    while (ros::ok()) {
+                        if (ts.isFinished()) {
+                            break;
+                        }
+
+                        r_HAND_target = ts.getDestFrame();
+
+                        // problem definition
+                        ompl::base::ProblemDefinitionPtr pdef(new ompl::base::ProblemDefinition(si));
+
+                        // set the start state
+                        if (!ts.usePrevQ()) {
+                            q = ts.getInitQ();
+                            dq.setZero();
+                            ddq.setZero();
+                        }
+
+                        ompl::base::ScopedState<> start(space);
+                        for (int q_idx = 0; q_idx < ndof; q_idx++) {
+                            start[q_idx] = q(q_idx);
+                        }
+
+                        pdef->clearStartStates();
+                        pdef->addStartState(start);
+
+                        // set the goal state sampler
+                        ompl::base::GoalPtr goal( new VelmaRightGripperIkGoal(si, r_HAND_target, kin_model, effector_name, boost::bind(&TestDynamicModel::isStateValid, this, _1, col_model, kin_model, ndof, wrist_cc_r, wrist_cc_l)) );
+                        pdef->setGoal(goal);
+
+                        publishTransform(br, r_HAND_target, "effector_dest", "world");
+
+                        // planner type
+                        ompl::base::PlannerPtr planner;
+
+                        if (planner_name == "RRT-Connect") {
+                            planner.reset( new ompl::geometric::RRTConnect(si) );
+                        }
+                        else if (planner_name == "RRT*") {
+                            planner.reset( new ompl::geometric::RRTstar(si) );
+                        }
+                        planner->setProblemDefinition(pdef);
+                        planner->setup();
+
+                        ros::Time t_begin = ros::Time::now();
+                        ompl::base::PlannerStatus status = planner->solve(rrt_max_time);
+                        ros::Time t_end = ros::Time::now();
+
+                        if (status) {// == ompl::base::PlannerStatus::EXACT_SOLUTION) {
+                            std::cout << "found solution" << std::endl;
+                            ompl::base::PathPtr path = pdef->getSolutionPath();
+                            std::cout << "path length: " << path->length() << std::endl;
+                            boost::shared_ptr<ompl::geometric::PathGeometric > ppath = boost::static_pointer_cast<ompl::geometric::PathGeometric >(path);
+
+                            std::list<Eigen::VectorXd > path2;
+                            for (int i = 0; i< ppath->getStateCount(); i++) {
+                                ompl::base::State *s = ppath->getState(i);
+                                Eigen::VectorXd x(ndof);
+                                stateOmplToEigen(s, x, ndof);
+                                path2.push_back(x);
+                            }
+                            double path_len2 = 0.0;
+                            bool collision = false;
+                            for (double f = 0.0; f < 1.0; f += 0.01/path->length()) {
+                                Eigen::VectorXd prev_q(q);
+                                getPointOnPath(path2, f, q);
+                                path_len2 += (q - prev_q).norm();
+
+                                std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
+                                // calculate forward kinematics for all links
+                                for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                                    kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
+                                }
+
+                                publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
+                                int m_id = 0;
+                                m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+
+                                std::set<int> excluded_link_idx;
+                                if (self_collision::checkCollision(col_model, links_fk, excluded_link_idx)) {
+                                    std::cout << "collision " << f << std::endl;
+                                    collision = true;
+                                }
+
+                                markers_pub_.addEraseMarkers(m_id, m_id+100);
+
+                                markers_pub_.publish();
+
+                                ros::spinOnce();
+                                ros::Duration(0.001).sleep();
+                            }
+                            std::cout << "path_len2 " << path_len2 << std::endl;
+                            tr.addResult(planner_name, ts.getNodeId(), true, collision, (t_end - t_begin).toSec(), path->length());
+
+                        }
+                        else {
+                            std::cout << "solution not found" << std::endl;
+                            tr.addResult(planner_name, ts.getNodeId(), false, false, (t_end - t_begin).toSec(), -1.0);
+                        }
+
+                        // next test
+                        ts.nextNode();
+
+//                        getchar();
+                    }
+                }   // if (planner_name == "RRT*" || planner_name = "RRT-Connect")
+                //
+                // Torque-based, hierarchical task simulation
+                //
+                else if (planner_name == "sim") {
+                    ts.startTest();
+
+                    ros::Time t_begin, t_end;
+                    Eigen::VectorXd q_prev(ndof);
+                    double path_len2 = 0.0;
+                    bool collision_in_prev_step = false;
+                    bool collision = false;
+                    bool goal_found = false;
+                    bool stop = false;
+                    bool first_time = true;
+                    while (ros::ok() && !stop) {
+
+                        if (loop_counter > 1500*4) {
+
+                            if (!first_time) {
+                                t_end = ros::Time::now();
+                                if (goal_found) {
+                                    tr.addResult(planner_name, ts.getNodeId(), true, collision, (t_end - t_begin).toSec(), path_len2);
+                                }
+                                else {
+                                    tr.addResult(planner_name, ts.getNodeId(), false, false, (t_end - t_begin).toSec(), -1.0);
+                                }
+                                ts.nextNode();
+                            }
+                            first_time = false;
+                            if (ts.isFinished()) {
+                                break;
+                            }
+
+                            r_HAND_target = ts.getDestFrame();
+                            if (!ts.usePrevQ()) {
+                                q = ts.getInitQ();
+                                dq.setZero();
+                                ddq.setZero();
+                                sim->setState(q, dq, ddq);
+                            }
+
+                            sim->setTarget(r_HAND_target);
+
+                            q_prev = q;
+                            path_len2 = 0.0;
+                            t_begin = ros::Time::now();
+                            collision = false;
+                            goal_found = false;
+                            if (!r_map->createDistanceMap(r_HAND_target.p, boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
+                                std::cout << "could not create the distance map" << std::endl;
+                                break;
+                            }
+                            else {
+                                std::cout << "created distance map" << std::endl;
+                            }
+                            loop_counter = 0;
+                        }
+                        loop_counter += 1;
+                        publishTransform(br, r_HAND_target, "effector_dest", "world");
+
+                        sim->oneStep();//&markers_pub_, 3000);
+                        if (sim->inCollision() && !collision_in_prev_step) {
+                            collision_in_prev_step = true;
+                            std::cout << "collision begin" << std::endl;
+                            printJointLimits(q, kin_model, joint_names);
+                            collision = true;
+                        }
+                        else if (!sim->inCollision() && collision_in_prev_step) {
+                            collision_in_prev_step = false;
+                            std::cout << "collision end" << std::endl;
+                        }
+
+                        sim->getState(q, dq, ddq);
+                        path_len2 += (q-q_prev).norm();
+                        q_prev = q;
+
+                        KDL::Frame current_T_B_E;
+                        kin_model->calculateFk(current_T_B_E, effector_name, q);
+                        KDL::Twist diff = KDL::diff(r_HAND_target, current_T_B_E);
+                        if (diff.vel.Norm() < 0.015 && diff.rot.Norm() < 5.0/180.0*PI) {
+                            goal_found = true;
+                            std::cout << "goal reached" << std::endl;
+                            std::cout << "path_len2 " << path_len2 << std::endl;
+                            loop_counter = 100000;
+                        }
+
+                        // publish markers and robot state with limited rate
+                        ros::Duration time_elapsed = ros::Time::now() - last_time;
+                        if (time_elapsed.toSec() > 0.05) {
+                            // calculate forward kinematics for all links
+                            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
+                            }
+                            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
+                            int m_id = 0;
+                            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+                            markers_pub_.publish();
+                            last_time = ros::Time::now();
+                            ros::spinOnce();
+                        }
+                        else {
+                            markers_pub_.clear();
+                        }
+                    }
+                }   // else if (planner_name == "sim")
+            }   // for (try_idx)
+        }   // for (planner_idx)
+
+        for (int planner_idx = 0; planner_idx < planner_names.size(); planner_idx++) {
+            std::string planner_name = planner_names[planner_idx];
+            for (int nodeId = 0; nodeId < ts.getNodes(); nodeId++) {
+                std::cout << planner_name << " nodeId: " << nodeId << " " << tr.getSuccessRate(planner_name, nodeId) << " " << tr.getTotalMeanPathLength(planner_name, nodeId) << " " << tr.getTotalMeanPlanningTime(planner_name, nodeId) << std::endl;
             }
-            std::cout << successes << std::endl;
-
         }
 
+        for (int planner_idx = 0; planner_idx < planner_names.size(); planner_idx++) {
+            std::string planner_name = planner_names[planner_idx];
+            for (int nodeId = 0; nodeId < ts.getNodes(); nodeId++) {
+                std::vector<bool> solutionFoundVec;
+                std::vector<bool> inCollisionVec;
+                std::vector<double> planningTimeVec;
+                std::vector<double> lengthVec;
+                tr.getTries(planner_name, nodeId, solutionFoundVec, inCollisionVec, planningTimeVec, lengthVec);
+                int success_count = 0;
+                for (int i = 0; i < solutionFoundVec.size(); i++) {
+                    std::cout << planner_name << " nodeId: " << nodeId << " " << (solutionFoundVec[i]?"success":"failure") << " " << (inCollisionVec[i]?"inCol":"noCol") << " " << lengthVec[i] << " " << planningTimeVec[i] << std::endl;
+                }
+            }
+        }
     }
 };
 
@@ -415,4 +724,5 @@ int main(int argc, char** argv) {
     test.spin();
     return 0;
 }
+
 

@@ -56,6 +56,8 @@
 #include "planer_utils/simulator.h"
 #include "planer_utils/reachability_map.h"
 
+#include "experiments_utilities.h"
+
 class TestDynamicModel {
     ros::NodeHandle nh_;
     ros::Publisher joint_state_pub_;
@@ -97,38 +99,9 @@ public:
         }
     }
 
-    void generateBox(std::vector<KDL::Vector > &vertices, std::vector<int> &polygons, double size_x, double size_y, double size_z) {
-        vertices.clear();
-        polygons.clear();
-        const int poly[] = {
-        4, 0, 1, 2, 3,
-        4, 4, 7, 6, 5,
-        4, 0, 4, 5, 1,
-        4, 3, 2, 6, 7,
-        4, 5, 6, 2, 1,
-        4, 0, 3, 7, 4,
-        };
-        const double vert[] = {
-        0.5, -0.5, 0.5,
-        0.5, 0.5, 0.5,
-        -0.5, 0.5, 0.5,
-        -0.5, -0.5, 0.5,
-        0.5, -0.5, -0.5,
-        0.5, 0.5, -0.5,
-        -0.5, 0.5, -0.5,
-        -0.5, -0.5, -0.5,
-        };
-        for (int i=0; i<8; i++) {
-            vertices.push_back(KDL::Vector(vert[i*3]*size_x, vert[i*3+1]*size_y, vert[i*3+2]*size_z));
-        }
-        for (int i=0; i<6*5; i++) {
-            polygons.push_back(poly[i]);
-        }
-    }
-
     bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
         // create dummy object
-        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.1, KDL::Frame(x));
+        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.07, KDL::Frame(x));
         KDL::Frame T_B_L1;
         KDL::Frame T_B_L2;
         return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
@@ -162,7 +135,7 @@ public:
                     }
     }
 
-    KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map) {
+    KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map) const {
         KDL::Twist diff = KDL::diff(F_a_b1, F_a_b2, 1.0);
         if (diff.vel.Norm() < 0.05) {
             return diff;
@@ -204,60 +177,8 @@ public:
         // external collision objects - part of virtual link connected to the base link
         self_collision::Link::VecPtrCollision col_array;
 
-        // the walls
-        std::vector<KDL::Vector > vertices;
-        std::vector<int > polygons;
-
-        KDL::Frame T_W_WALLS(KDL::Rotation::RotZ(0.0), KDL::Vector(0.4, 0, 0));
-        generateBox(vertices, polygons, 0.2, 2.0, 2.3);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.1, 0.0, 1.15))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(1.1, 0.0, 1.15))) );
-
-        generateBox(vertices, polygons, 2.2, 0.2, 2.3);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 1.0, 1.15))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, -1.0, 1.15))) );
-
-        generateBox(vertices, polygons, 2.2, 2.0, 0.2);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 0.0, 2.3))) );
-
-        // the door
-        KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
-        generateBox(vertices, polygons, 0.8, 0.1, 2.0);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR, "box 0.8 0.1 2.0") );
-        // the lock
-        KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
-        col_array.push_back( self_collision::createCollisionSphere(0.02, T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK) );
-        // the handle
-        KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
-        generateBox(vertices, polygons, 0.15, 0.05, 0.02);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR * T_DOOR_HANDLE, "box 0.15 0.05 0.02") );
-
-        // the bin
-        KDL::Frame T_W_BIN(KDL::Vector(0.2, -0.7, 0.5));
-        generateBox(vertices, polygons, 0.02, 0.3, 0.4);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.15, 0.0, 0.2)), "box 0.02 0.3 0.4") );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(-0.15, 0.0, 0.2)), "box 0.02 0.3 0.4") );
-
-        generateBox(vertices, polygons, 0.3, 0.02, 0.4);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.15, 0.2)), "box 0.3 0.02 0.4") );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, -0.15, 0.2)), "box 0.3 0.02 0.4") );
-
-        generateBox(vertices, polygons, 0.3, 0.3, 0.02);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.0, 0.0)), "box 0.3 0.3 0.02") );
-
-        // the cabinet
-        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
-        generateBox(vertices, polygons, 0.4, 0.6, 0.02);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3)), "box 0.4 0.6 0.02") );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.0)), "box 0.4 0.6 0.02") );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.3)), "box 0.4 0.6 0.02") );
-
-        generateBox(vertices, polygons, 0.02, 0.6, 0.6);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0.2,0,0)), "box 0.02 0.6 0.6") );
-
-        generateBox(vertices, polygons, 0.4, 0.02, 0.6);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0)), "box 0.4 0.02 0.6") );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0)), "box 0.4 0.02 0.6") );
+        KDL::Frame T_W_LOCK, T_W_BIN;
+        createEnvironment(col_array, T_W_LOCK, T_W_BIN);
 
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
@@ -358,7 +279,7 @@ public:
         max_q(6) = max_q(13) = 50.0/180.0*PI;   // arm_5_joint
         max_q(7) = max_q(14) = 50.0/180.0*PI;   // arm_6_joint
 
-        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, q_eq, 100.0*max_q ) );
+        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, q_eq, 10000.0*max_q ) );
 
         // loop variables
         ros::Time last_time = ros::Time::now();
@@ -366,8 +287,8 @@ public:
         int loop_counter = 50000;
         ros::Rate loop_rate(500);
 
-        // TEST: distance map
-        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.025, 3));
+//        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.025, 3));
+        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.04, 3));
 
         KDL::Vector lower_bound(0.0, -0.9, 0.3);
         KDL::Vector upper_bound(1.5, 0.9, 2.2);
@@ -380,108 +301,11 @@ public:
 
         sim->updateMetric( boost::bind(&TestDynamicModel::distanceMetric, this, _1, _2, r_map) );
 
-
-/*
-        double z = 1.2;
-        while (ros::ok()) {
-            int m_id = 0;
-
-            z += 0.025;
-            for (double x = lower_bound(0)+0.0125; x < upper_bound(0); x += 0.025) {
-//                {
-//                    double y = 0.0;
-                for (double y = lower_bound(1)+0.0125; y < upper_bound(1); y += 0.025) {
-//                    for (double z = lower_bound(2)+0.0125; z < upper_bound(2); z += 0.025)
-                    {
-//                        double z = 1.4;
-                        KDL::Vector pt_W(x,y,z);
-                        double val = 0.0;
-                        if (!r_map->getDistnace(pt_W, val)) {   
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 0, 0, 0, 0.5, 0.01, "world");
-                        }
-                        else if (val == -1.0) {
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 1, 1, 0, 0.5, 0.01, "world");
-                        }
-                        else if (val == -2.0) {
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.01, "world");
-                        }
-                        else if (val >= 0.0) {
-                            val /= 1.1;
-                            KDL::Vector gr;
-                            if (r_map->getGradient(pt_W, gr)) {
-                                m_id = markers_pub_.addVectorMarker(m_id, pt_W, pt_W + gr*0.03, 0, 1, 0, 1, 0.01, "world");
-                            }
-                            else {
-                                m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.02, "world");
-                            }
-                            m_id = markers_pub_.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.01, "world");
-                        }
-                    }
-                }
-            }
-            KDL::Vector rand_pt(randomUniform(lower_bound(0)-1, upper_bound(0)+1), randomUniform(lower_bound(1), upper_bound(1)), randomUniform(lower_bound(2), upper_bound(2)));
-            m_id = markers_pub_.addSinglePointMarker(m_id, rand_pt, 1, 0, 0, 0.5, 0.1, "world");
-            int path_length = 0;
-            while (true) {
-                bool use_twist = true;
-                if (use_twist) {
-                    KDL::Twist twist = distanceMetric(KDL::Frame(rand_pt), KDL::Frame(KDL::Vector(1.05, 0.0, 1.35)), r_map);
-                    KDL::Vector prev = rand_pt;
-                    rand_pt = rand_pt + twist.vel * 0.02;
-                    m_id = markers_pub_.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
-                }
-                else {
-                    KDL::Vector gr;
-                    double dist = 0.0;
-                    if (!r_map->getDistnace(rand_pt, dist) || dist < 0.05) {
-                        std::cout << "distance failed" << std::endl;
-                        break;
-                    }
-                    std::vector<ReachabilityMap::GradientInfo > gradients;
-                    gradients.resize(27);
-                    r_map->getAllGradients(rand_pt, gradients);
-                    for (int i=0; i<27; i++) {
-                        if (gradients[i].valid_) {
-                            m_id = markers_pub_.addVectorMarker(m_id, rand_pt, rand_pt + gradients[i].direction_*0.02, 0, 0, 1, 1, 0.005, "world");
-                        }
-                    }
-
-                    if (r_map->getGradient(rand_pt, gr)) {
-                        KDL::Vector prev = rand_pt;
-                        rand_pt = rand_pt + gr * 0.02;
-                        m_id = markers_pub_.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
-                    }
-                    else {
-                        std::cout << "gradient failed" << std::endl;
-                        break;
-                    }
-                }
-                path_length++;
-                if (path_length > 300) {
-                    std::cout << "path length exceeded" << std::endl;
-                    break;
-                }
-            }
-            markers_pub_.addEraseMarkers(m_id, m_id+300);
-
-            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
-            }
-
-            m_id = 15000;
-            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
-            markers_pub_.publish();
-            markers_pub_.publish();
-
-            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
-            ros::spinOnce();
-            loop_rate.sleep();
-            ros::Duration(0.5).sleep();
-            getchar();
+        // TEST: distance metric
+        if (false) {
+            showMetric(lower_bound, upper_bound, kin_model, col_model, r_map, markers_pub_);
+            return;
         }
-
-        return;
-//*/
 
         int_marker_pose_ = r_HAND_target;
 
@@ -493,12 +317,12 @@ public:
         bool stop = false;
         while (ros::ok() && !stop) {
 
-            if (loop_counter > 1500*2) {
+            if (loop_counter > 1500*4) {
                     sim->setState(q, dq, ddq);
-                    double rand01 = randomUniform(0, 2.2);
+                    double rand01 = randomUniform(0, 1.4);
 
                     if (rand01 > 1.2) {
-                        r_HAND_target = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK * KDL::Frame(KDL::Rotation::RotZ(90.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.0, -0.1, 0.0));
+                        r_HAND_target = T_W_LOCK * KDL::Frame(KDL::Rotation::RotZ(90.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.0, -0.11, 0.0));
                     }
                     else if (rand01 > 1.0) {
                         r_HAND_target = T_W_BIN * KDL::Frame(KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
@@ -532,7 +356,7 @@ public:
             loop_counter += 1;
             publishTransform(br, r_HAND_target, "effector_dest", "world");
 
-            sim->oneStep(&markers_pub_, 3000);
+            sim->oneStep();//&markers_pub_, 3000);
             if (sim->inCollision() && !collision_in_prev_step) {
                 collision_in_prev_step = true;
                 std::cout << "collision begin" << std::endl;
@@ -544,54 +368,14 @@ public:
                 std::cout << "collision end" << std::endl;
             }
 
-            if (q_history.empty()) {
-                q_history.push_back(q);
-            }
-            else {
-                if ((q_history.back() - q).norm() > 10.0/180.0*PI) {
-                    q_history.push_back(q);
-                }
-            }
-
             sim->getState(q, dq, ddq);
-            q_history_latest.push_back(q);
-            if (q_history_latest.size() > 100) {
-                q_history_latest.pop_front();
-                Eigen::VectorXd q_mean(ndof);
-                q_mean.setZero();
-                for (std::list<Eigen::VectorXd >::const_iterator it = q_history_latest.begin(); it != q_history_latest.end(); it++) {
-                    q_mean += (*it);
-                }
-                q_mean = q_mean / q_history_latest.size();
-                double var = 0.0;
-                for (std::list<Eigen::VectorXd >::const_iterator it = q_history_latest.begin(); it != q_history_latest.end(); it++) {
-                    double norm = ((*it) - q_mean).norm();
-                    var += norm * norm;
-                }
-//                std::cout << var << std::endl;
-                if (var < 0.001) {
-                    KDL::Frame current_T_B_E;
-                    kin_model->calculateFk(current_T_B_E, effector_name, q);
-                    KDL::Twist diff = KDL::diff(r_HAND_target, current_T_B_E);
-                    bool goal_reached = false;
-                    if (diff.vel.Norm() < 0.005 && diff.rot.Norm() < 1.0/180.0*PI) {
-                        goal_reached = true;
-                    }
-
-                    std::cout << "stopped" << std::endl;
-                    printJointLimits(q, kin_model, joint_names);
-                    if (goal_reached) {
-                        std::cout << "goal reached" << std::endl;
-                    } else {
-                        std::cout << "could not reach goal" << std::endl;
-                    }
-                    getchar();
-                    loop_counter = 100000;
-                    q_history_latest.clear();
-                }
+            KDL::Frame current_T_B_E;
+            kin_model->calculateFk(current_T_B_E, effector_name, q);
+            KDL::Twist diff = KDL::diff(r_HAND_target, current_T_B_E);
+            if (diff.vel.Norm() < 0.015 && diff.rot.Norm() < 5.0/180.0*PI) {
+                std::cout << "goal reached" << std::endl;
+                loop_counter = 100000;
             }
-
-            
 
             // publish markers and robot state with limited rate
             ros::Duration time_elapsed = ros::Time::now() - last_time;
@@ -613,7 +397,7 @@ public:
                 markers_pub_.clear();
             }
             ros::spinOnce();
-            loop_rate.sleep();
+//            loop_rate.sleep();
 //            ros::Duration(1.0).sleep();
 //            return;
         }
