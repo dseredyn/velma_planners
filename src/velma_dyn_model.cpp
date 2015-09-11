@@ -169,7 +169,7 @@ void DynModelVelma::accel(Eigen::VectorXd &QDD, const Eigen::VectorXd &q, const 
 //    tmpTau_ = C_ * dq;
 	for (iCol = 0; iCol < 15; iCol++){
 //		tmpTau_[iCol] = t[iCol] -  tmpTau_[iCol] - gravload[iCol][0] + friction[iCol][0];
-		tmpTau_[iCol] = t[iCol] - dq[iCol] * 0.5;
+		tmpTau_[iCol] = t[iCol] - dq[iCol] * 1.0;
 	}
 	/* compute acceleration */
     QDD = invM_ * tmpTau_;

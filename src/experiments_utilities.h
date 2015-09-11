@@ -52,6 +52,7 @@ class TestScenario {
 public:
 
     void addNode(const KDL::Frame &T_W_G_dest, const Eigen::VectorXd &q_init, bool use_prev_q);
+    void addNode(const KDL::Frame &T_W_G_dest, const double q_init[], int ndof, bool use_prev_q);
 
     void startTest();
     void nextNode();
@@ -81,11 +82,13 @@ class TestResults {
 public:
     void addResult(const std::string &planner_name, int nodeId, bool solutionFound, bool inCollision, double planningTime, double length);
 
-    double getTotalMeanPathLength(const std::string &planner_name, int nodeId) const;
+//    double getTotalMeanPathLength(const std::string &planner_name, int nodeId) const;
     double getTotalMeanPlanningTime(const std::string &planner_name, int nodeId) const;
+    double getTotalPlanningTimeVariance(const std::string &planner_name, int nodeId) const;
 
     double getSuccessMeanPathLength(const std::string &planner_name, int nodeId) const;
-    double getSuccessMeanPlanningTime(const std::string &planner_name, int nodeId) const;
+    double getSuccessPathLengthVariance(const std::string &planner_name, int nodeId) const;
+//    double getSuccessMeanPlanningTime(const std::string &planner_name, int nodeId) const;
 
     double getSuccessRate(const std::string &planner_name, int nodeId) const;
 
@@ -104,13 +107,19 @@ protected:
     std::map<std::string, std::vector<SingleResult > > results_;
 };
 
-void showMetric(const KDL::Vector &lower_bound, const KDL::Vector &upper_bound,
+void showMetric(const Eigen::VectorXd &q, const KDL::Vector &lower_bound, const KDL::Vector &upper_bound,
                     const boost::shared_ptr<KinematicModel> &kin_model, const boost::shared_ptr<self_collision::CollisionModel> &col_model,
                     const boost::shared_ptr<ReachabilityMap > &r_map, MarkerPublisher &markers_pub);
 void generateBox(std::vector<KDL::Vector > &vertices, std::vector<int> &polygons, double size_x, double size_y, double size_z);
 void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Frame &T_W_LOCK, KDL::Frame &T_W_BIN);
 
 bool randomizedIkSolution(const boost::shared_ptr<KinematicModel> &kin_model, const KDL::Frame &T_W_G_dest, Eigen::VectorXd &q);
+
+KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map);
+
+void printJointLimits(const Eigen::VectorXd &q, const boost::shared_ptr<KinematicModel> &kin_model, const std::vector<std::string> &joint_names);
+
+bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model, double sphereRadius);
 
 #endif  // EXPERIMENT_UTILITIES_H__
 

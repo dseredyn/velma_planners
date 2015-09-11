@@ -56,6 +56,8 @@
 #include "planer_utils/random_uniform.h"
 #include "planer_utils/utilities.h"
 
+#include "ompl_utilities.h"
+
 class TestOmpl {
     ros::NodeHandle nh_;
     ros::Publisher joint_state_pub_;
@@ -113,12 +115,6 @@ public:
             }
         }
         std::cout << "ERROR: getPointOnPath: ??" << std::endl;
-    }
-
-    void stateOmplToEigen(const ompl::base::State *s, Eigen::VectorXd &x, int ndof) {
-        for (int q_idx = 0; q_idx < ndof; q_idx++) {
-            x(q_idx) = s->as<ompl::base::RealVectorStateSpace::StateType >()->operator[](q_idx);
-        }
     }
 
     bool isStateValid(const ompl::base::State *s, const boost::shared_ptr<self_collision::CollisionModel > &col_model, const boost::shared_ptr<KinematicModel > &kin_model, int ndof) {

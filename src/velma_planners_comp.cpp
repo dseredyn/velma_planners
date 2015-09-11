@@ -68,73 +68,7 @@
 #include "planer_utils/reachability_map.h"
 
 #include "experiments_utilities.h"
-
-void stateOmplToEigen(const ompl::base::State *s, Eigen::VectorXd &x, int ndof) {
-    for (int q_idx = 0; q_idx < ndof; q_idx++) {
-        x(q_idx) = s->as<ompl::base::RealVectorStateSpace::StateType >()->operator[](q_idx);
-    }
-}
-
-void stateEigenToOmpl(const Eigen::VectorXd &x, ompl::base::State *s, int ndof) {
-    for (int q_idx = 0; q_idx < ndof; q_idx++) {
-        s->as<ompl::base::RealVectorStateSpace::StateType >()->operator[](q_idx) = x(q_idx);
-    }
-}
-
-class VelmaRightGripperIkGoal : public ompl::base::GoalSampleableRegion {
-public:
-
-//const boost::shared_ptr<self_collision::CollisionModel> &col_model, const boost::shared_ptr<KinematicModel> &kin_model
-
-    VelmaRightGripperIkGoal(const ompl::base::SpaceInformationPtr &si, const KDL::Frame &T_W_G_dest,
-                            const boost::shared_ptr<KinematicModel> &kin_model, const std::string &effector_name,
-                            const ompl::base::StateValidityCheckerFn &svc) :
-        GoalSampleableRegion(si),
-        T_W_G_dest_(T_W_G_dest),
-        kin_model_(kin_model),
-        ndof_(kin_model_->getDofCount()),
-        effector_name_(effector_name),
-        svc_(svc)
-    {
-    }
-
-    virtual void sampleGoal (ompl::base::State *st) const {
-        Eigen::VectorXd ik_q( ndof_ );
-        while (true) {
-            if (randomizedIkSolution(kin_model_, T_W_G_dest_, ik_q)) {
-                stateEigenToOmpl(ik_q, st, ndof_);
-                if (svc_(st)){
-                    //std::cout << "found ik solution" << std::endl;
-                    break;
-                }
-            }
-        }
-    }
-
-    virtual unsigned int maxSampleCount () const {
-        return 1000000;
-    }
-
-    virtual bool couldSample () const {
-        return true;
-    }
-
-    virtual double distanceGoal (const ompl::base::State *st) const {
-        Eigen::VectorXd q(ndof_);
-        stateOmplToEigen(st, q, ndof_);
-        KDL::Frame T_W_G;
-        kin_model_->calculateFk(T_W_G, effector_name_, q);
-        KDL::Twist diff = KDL::diff(T_W_G, T_W_G_dest_, 1.0);
-        return diff.vel.Norm() + diff.rot.Norm();
-    }
-
-protected:
-    KDL::Frame T_W_G_dest_;
-    const boost::shared_ptr<KinematicModel> &kin_model_;
-    int ndof_;
-    std::string effector_name_;
-    ompl::base::StateValidityCheckerFn svc_;
-};
+#include "ompl_utilities.h"
 
 class TestDynamicModel {
     ros::NodeHandle nh_;
@@ -154,81 +88,6 @@ public:
     }
 
     ~TestDynamicModel() {
-    }
-
-    void generatePossiblePose(KDL::Frame &T_B_E, Eigen::VectorXd &q, int ndof, const std::string &effector_name, const boost::shared_ptr<self_collision::CollisionModel> &col_model, const boost::shared_ptr<KinematicModel> &kin_model) {
-        while (true) {
-            for (int q_idx = 0; q_idx < ndof; q_idx++) {
-                q(q_idx) = randomUniform(kin_model->getLowerLimit(q_idx), kin_model->getUpperLimit(q_idx));
-            }
-            std::set<int> excluded_link_idx;
-            std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
-            // calculate forward kinematics for all links
-            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
-            }
-
-            if (!self_collision::checkCollision(col_model, links_fk, excluded_link_idx)) {
-                T_B_E = links_fk[col_model->getLinkIndex(effector_name)];
-                break;
-            }
-        }
-    }
-
-    bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model) {
-        // create dummy object
-        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(0.07, KDL::Frame(x));
-        KDL::Frame T_B_L1;
-        KDL::Frame T_B_L2;
-        return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
-    }
-
-    void printJointLimits(const Eigen::VectorXd &q, const boost::shared_ptr<KinematicModel> &kin_model, const std::vector<std::string> &joint_names) const {
-                    int ndof = q.innerSize();
-                    for (int q_idx = 0; q_idx < ndof; q_idx++) {
-                        double lo = kin_model->getLowerLimit(q_idx), up = kin_model->getUpperLimit(q_idx);
-                        double f = (q(q_idx) - lo) / (up - lo);
-                        int steps = 50;
-                        int step = static_cast<int >(f*steps);
-                        if (step >= steps) {
-                            step = steps-1;
-                        }
-                        for (int s = 0; s < steps; s++) {
-                            std::cout << ((s == step)?"*":".");
-                        }
-                        std::cout << "  ";
-
-                        steps = 3;
-                        step = static_cast<int >(f*steps);
-                        if (step >= steps) {
-                            step = steps-1;
-                        }
-                        for (int s = 0; s < steps; s++) {
-                            std::cout << ((s == step)?"*":".");
-                        }
-
-                        std::cout << "    " << joint_names[q_idx] << std::endl;
-                    }
-    }
-
-    KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map) const {
-        KDL::Twist diff = KDL::diff(F_a_b1, F_a_b2, 1.0);
-        if (diff.vel.Norm() < 0.05) {
-            return diff;
-        }
-
-        double dist = (F_a_b1.p - F_a_b2.p).Norm();
-        KDL::Vector gr;
-        if (r_map->getGradient(F_a_b1.p, gr)) {
-            diff.vel = gr * dist;
-//            int m_id = 6000;
-//            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + gr*0.3, 0, 0, 1, 1, 0.005, "world");
-//            markers_pub_.publish();
-//            ros::spinOnce();
-        }
-
-
-        return diff;
     }
 
     bool isStateValid(const ompl::base::State *s, const boost::shared_ptr<self_collision::CollisionModel > &col_model,
@@ -393,18 +252,20 @@ public:
 
         KDL::Vector lower_bound(0.0, -0.9, 0.3);
         KDL::Vector upper_bound(1.5, 0.9, 2.2);
-        if (!r_map->createDistanceMap(KDL::Vector(1.05, 0.0, 1.35), boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
+        if (!r_map->createDistanceMap(KDL::Vector(1.05, 0.0, 1.35), boost::bind(&checkCollision, _1, col_model, 0.04), lower_bound, upper_bound)) {
             std::cout << "could not create the distance map" << std::endl;
         }
         else {
 //            std::cout << "created distance map" << std::endl;
         }
 
-        sim->updateMetric( boost::bind(&TestDynamicModel::distanceMetric, this, _1, _2, r_map) );
+        sim->updateMetric( boost::bind(&distanceMetric, _1, _2, r_map) );
 
         ros::Duration(1.0).sleep();
 
+        //
         // add tests
+        //
         KDL::Frame T_W_G_lock = T_W_LOCK * KDL::Frame(KDL::Rotation::RotZ(90.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.0, -0.11, 0.0));
         KDL::Frame T_W_G_bin1 = T_W_BIN * KDL::Frame(KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
         KDL::Frame T_W_G_bin2 = T_W_BIN * KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
@@ -416,6 +277,7 @@ public:
         KDL::Frame T_W_G_weird = KDL::Frame(KDL::Vector(0.7, -0.6, 1.8));
 
         TestScenario ts;
+/*
         // single movements from the same configuration
         ts.addNode(T_W_G_weird, q_eq, false);
         ts.addNode(T_W_G_lock, q_eq, false);
@@ -438,15 +300,34 @@ public:
         ts.addNode(T_W_G_cab5, q_eq, true);
         ts.addNode(T_W_G_cab2, q_eq, true);
         ts.addNode(T_W_G_cab4, q_eq, true);
+*/
+
+        // impossible move
+        ts.addNode(T_W_G_weird, q_eq, false);
+
+        // lock -> bin
+        double q_lock1_tab[] = {1.64309, 1.91875, -1.98982, 1.61324, 1.02248, 0.12445, -1.7644, -0.117448, 1.47055, 2.02187, -1.48399, -1.57693, 0.000573556, 1.5708, -1.5708};
+        ts.addNode(T_W_G_bin1, q_lock1_tab, ndof, false);
+
+        // bin -> bin
+        double q_bin1_tab[] = {0.186237,    1.43153,   -1.60876,    1.64294,   0.464018,  0.0838286,   -1.16511,   0.470589,    1.56105,    1.65937,   -1.51095,   -1.58767, 0.00154277, 1.5708, -1.5708};
+        ts.addNode(T_W_G_bin2, q_bin1_tab, ndof, false);
+
+        // cab_g -> cab_d
+        double q_cab_g_tab[] = {0.890049,    2.28463,   -1.47813,    2.19092,    1.46628,   0.186504,  -0.785303,  -0.501551,     1.4145,    1.68104,   -1.44994,    -1.6063, 0.00322741,     1.5708,    -1.5708};
+        ts.addNode(T_W_G_cab2, q_cab_g_tab, ndof, false);
+
+        // lock -> cab_g
+        ts.addNode(T_W_G_cab2, q_lock1_tab, ndof, false);
 
         TestResults tr;
 
         std::vector<std::string > planner_names;
         planner_names.push_back("sim");
-        planner_names.push_back("RRT*");
-        planner_names.push_back("RRT-Connect");
+//        planner_names.push_back("RRT*");
+//        planner_names.push_back("RRT-Connect");
 
-        double rrt_max_time = 100.0;
+        double rrt_max_time = 50.0;
 
         for (int planner_idx = 0; planner_idx < planner_names.size(); planner_idx++) {
             std::string planner_name = planner_names[planner_idx];
@@ -634,7 +515,7 @@ public:
                             t_begin = ros::Time::now();
                             collision = false;
                             goal_found = false;
-                            if (!r_map->createDistanceMap(r_HAND_target.p, boost::bind(&TestDynamicModel::checkCollision, this, _1, col_model), lower_bound, upper_bound)) {
+                            if (!r_map->createDistanceMap(r_HAND_target.p, boost::bind(&checkCollision, _1, col_model, 0.04), lower_bound, upper_bound)) {
                                 std::cout << "could not create the distance map" << std::endl;
                                 break;
                             }
@@ -697,7 +578,17 @@ public:
         for (int planner_idx = 0; planner_idx < planner_names.size(); planner_idx++) {
             std::string planner_name = planner_names[planner_idx];
             for (int nodeId = 0; nodeId < ts.getNodes(); nodeId++) {
-                std::cout << planner_name << " nodeId: " << nodeId << " " << tr.getSuccessRate(planner_name, nodeId) << " " << tr.getTotalMeanPathLength(planner_name, nodeId) << " " << tr.getTotalMeanPlanningTime(planner_name, nodeId) << std::endl;
+                double successRate = tr.getSuccessRate(planner_name, nodeId);
+                double meanTime = tr.getTotalMeanPlanningTime(planner_name, nodeId);
+                double timeVar = tr.getTotalPlanningTimeVariance(planner_name, nodeId);
+                if (successRate < 0.001) {
+                    std::cout << planner_name << " nodeId: " << nodeId << " suc " << successRate << " time " << meanTime << " v " << timeVar << " path " << (-1.0) << " v " << (-1.0) << std::endl;
+                }
+                else {
+                    double meanPath = tr.getSuccessMeanPathLength(planner_name, nodeId);
+                    double pathVar = tr.getSuccessPathLengthVariance(planner_name, nodeId);
+                    std::cout << planner_name << " nodeId: " << nodeId << " suc " << successRate << " time " << meanTime << " v " << timeVar << " path " << meanPath << " v " << pathVar << std::endl;
+                }
             }
         }
 

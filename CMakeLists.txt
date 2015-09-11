@@ -13,7 +13,7 @@ link_directories(${orocos_kdl_LIBRARY_DIRS} ${OMPL_LIBRARY_DIRS})
 
 include_directories(${catkin_INCLUDE_DIRS} ${Eigen_INCLUDE_DIRS} ${USE_OROCOS_INCLUDE_DIRS} ${OMPL_INCLUDE_DIRS})
 
-add_executable(test_velma_ompl src/test_ompl.cpp)
+add_executable(test_velma_ompl src/test_ompl.cpp src/ompl_utilities.cpp src/experiments_utilities.cpp src/output_ikfast_velma_right.cpp)
 add_executable(test_velma_sim src/velma_sim.cpp src/velma_dyn_model.cpp)
 add_executable(test_velma_sim_metric src/velma_sim_metric.cpp src/velma_dyn_model.cpp src/output_ikfast_velma_right.cpp src/experiments_utilities.cpp)
 add_executable(test_velma_rrt src/velma_rrt.cpp src/velma_dyn_model.cpp)
@@ -22,7 +22,7 @@ add_executable(test_velma_rrt3 src/velma_rrt3.cpp src/velma_dyn_model.cpp)
 add_executable(test_velma_est src/velma_est.cpp src/velma_dyn_model.cpp src/est.cpp)
 add_executable(test_velma_rta_star src/velma_rta_star.cpp src/velma_dyn_model.cpp src/rta_star.cpp)
 add_executable(test_velma_learn src/velma_learn.cpp src/velma_dyn_model.cpp)
-add_executable(test_velma_planners_comp src/velma_planners_comp.cpp src/velma_dyn_model.cpp src/output_ikfast_velma_right.cpp src/experiments_utilities.cpp)
+add_executable(test_velma_planners_comp src/velma_planners_comp.cpp src/velma_dyn_model.cpp src/output_ikfast_velma_right.cpp src/experiments_utilities.cpp src/ompl_utilities.cpp)
 
 target_link_libraries(test_velma_ompl ${catkin_LIBRARIES} ${OMPL_LIBRARIES})
 target_link_libraries(test_velma_sim ${catkin_LIBRARIES} ${OMPL_LIBRARIES})

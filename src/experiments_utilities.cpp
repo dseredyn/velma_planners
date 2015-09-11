@@ -32,6 +32,7 @@
 #include "experiments_utilities.h"
 
 #include "planer_utils/random_uniform.h"
+#include "planer_utils/utilities.h"
 
 #define IKFAST_HAS_LIBRARY
 #include "ikfast.h"
@@ -40,6 +41,19 @@ void TestScenario::addNode(const KDL::Frame &T_W_G_dest, const Eigen::VectorXd &
     TestNode n;
     n.T_W_G_dest_ = T_W_G_dest;
     n.q_init_ = q_init;
+    n.use_prev_q_ = use_prev_q;
+
+    nodes_list_.push_back( n );
+}
+
+void TestScenario::addNode(const KDL::Frame &T_W_G_dest, const double q_init[], int ndof, bool use_prev_q) {
+    Eigen::VectorXd q(ndof);
+    for (int q_idx = 0; q_idx < ndof; q_idx++) {
+        q(q_idx) = q_init[q_idx];
+    }
+    TestNode n;
+    n.T_W_G_dest_ = T_W_G_dest;
+    n.q_init_ = q;
     n.use_prev_q_ = use_prev_q;
 
     nodes_list_.push_back( n );
@@ -89,7 +103,7 @@ void TestResults::addResult(const std::string &planner_name, int nodeId, bool so
 
     results_[planner_name].push_back(r);
 }
-
+/*
 double TestResults::getTotalMeanPathLength(const std::string &planner_name, int nodeId) const {
     std::vector<bool> solutionFoundVec;
     std::vector<bool> inCollisionVec;
@@ -102,7 +116,7 @@ double TestResults::getTotalMeanPathLength(const std::string &planner_name, int 
     }
     return meanPathLength / static_cast<double>(solutionFoundVec.size());
 }
-
+*/
 double TestResults::getTotalMeanPlanningTime(const std::string &planner_name, int nodeId) const {
     std::vector<bool> solutionFoundVec;
     std::vector<bool> inCollisionVec;
@@ -116,6 +130,20 @@ double TestResults::getTotalMeanPlanningTime(const std::string &planner_name, in
     return meanPlanningTime / static_cast<double>(solutionFoundVec.size());
 }
 
+double TestResults::getTotalPlanningTimeVariance(const std::string &planner_name, int nodeId) const {
+    std::vector<bool> solutionFoundVec;
+    std::vector<bool> inCollisionVec;
+    std::vector<double> planningTimeVec;
+    std::vector<double> lengthVec;
+    getTries(planner_name, nodeId, solutionFoundVec, inCollisionVec, planningTimeVec, lengthVec);
+    double meanPlanningTime = getTotalMeanPlanningTime(planner_name, nodeId);
+    double variance = 0.0;
+    for (int i = 0; i < solutionFoundVec.size(); i++) {
+        variance += (meanPlanningTime - planningTimeVec[i]) * (meanPlanningTime - planningTimeVec[i]);
+    }
+    return variance;
+}
+
 double TestResults::getSuccessMeanPathLength(const std::string &planner_name, int nodeId) const {
     std::vector<bool> solutionFoundVec;
     std::vector<bool> inCollisionVec;
@@ -125,7 +153,7 @@ double TestResults::getSuccessMeanPathLength(const std::string &planner_name, in
     int success_count = 0;
     double meanPathLength = 0.0;
     for (int i = 0; i < solutionFoundVec.size(); i++) {
-        if (solutionFoundVec[i]) {
+        if (solutionFoundVec[i] && !inCollisionVec[i]) {
             success_count++;
             meanPathLength += lengthVec[i];
         }
@@ -133,6 +161,24 @@ double TestResults::getSuccessMeanPathLength(const std::string &planner_name, in
     return meanPathLength / static_cast<double>(success_count);
 }
 
+double TestResults::getSuccessPathLengthVariance(const std::string &planner_name, int nodeId) const {
+    std::vector<bool> solutionFoundVec;
+    std::vector<bool> inCollisionVec;
+    std::vector<double> planningTimeVec;
+    std::vector<double> lengthVec;
+    getTries(planner_name, nodeId, solutionFoundVec, inCollisionVec, planningTimeVec, lengthVec);
+
+    double meanPathLength = getSuccessMeanPathLength(planner_name, nodeId);
+    double variance = 0.0;
+    for (int i = 0; i < solutionFoundVec.size(); i++) {
+        if (solutionFoundVec[i] && !inCollisionVec[i]) {
+            variance += (meanPathLength - lengthVec[i]) * (meanPathLength - lengthVec[i]);
+        }
+    }
+    return variance;
+}
+
+/*
 double TestResults::getSuccessMeanPlanningTime(const std::string &planner_name, int nodeId) const {
     std::vector<bool> solutionFoundVec;
     std::vector<bool> inCollisionVec;
@@ -142,14 +188,14 @@ double TestResults::getSuccessMeanPlanningTime(const std::string &planner_name, 
     int success_count = 0;
     double meanPlanningTime = 0.0;
     for (int i = 0; i < solutionFoundVec.size(); i++) {
-        if (solutionFoundVec[i]) {
+        if (solutionFoundVec[i] && !inCollisionVec[i]) {
             success_count++;
             meanPlanningTime += planningTimeVec[i];
         }
     }
     return meanPlanningTime / static_cast<double>(success_count);
 }
-
+*/
 double TestResults::getSuccessRate(const std::string &planner_name, int nodeId) const {
     std::vector<bool> solutionFoundVec;
     std::vector<bool> inCollisionVec;
@@ -186,93 +232,103 @@ void TestResults::getTries(const std::string &planner_name, int nodeId, std::vec
     }
 }
 
-void showMetric(const KDL::Vector &lower_bound, const KDL::Vector &upper_bound,
+void showMetric(const Eigen::VectorXd &q, const KDL::Vector &lower_bound, const KDL::Vector &upper_bound,
                     const boost::shared_ptr<KinematicModel> &kin_model, const boost::shared_ptr<self_collision::CollisionModel> &col_model,
                     const boost::shared_ptr<ReachabilityMap > &r_map, MarkerPublisher &markers_pub) {
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
 
-        double z = 1.2;
+        bool show_path = false;
+
+//        double z = 1.2;
+        double y = -0.24;
         while (ros::ok()) {
             int m_id = 0;
 
-            z += 0.025;
-            for (double x = lower_bound(0)+0.0125; x < upper_bound(0); x += 0.025) {
-//                {
+//            z += 0.025;
+            y += 0.04;
+//            for (double x = lower_bound(0)+0.02; x < upper_bound(0); x += 0.01) {
+            for (double x = 0.7; x < 1.2; x += 0.01) {
+                {
 //                    double y = 0.0;
-                for (double y = lower_bound(1)+0.0125; y < upper_bound(1); y += 0.025) {
-//                    for (double z = lower_bound(2)+0.0125; z < upper_bound(2); z += 0.025)
+//                for (double y = lower_bound(1)+0.0125; y < upper_bound(1); y += 0.04) {
+//                    for (double z = lower_bound(2)+0.02; z < upper_bound(2); z += 0.01)
+                    for (double z = 1.5; z < 2.1; z += 0.01)
                     {
 //                        double z = 1.4;
                         KDL::Vector pt_W(x,y,z);
                         double val = 0.0;
-                        if (!r_map->getDistnace(pt_W, val)) {   
+/*                        if (!r_map->getDistnace(pt_W, val)) {   
                             m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 0, 0.5, 0.01, "world");
                         }
                         else if (val == -1.0) {
                             m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, 1, 0, 0.5, 0.01, "world");
                         }
                         else if (val == -2.0) {
-                            m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.01, "world");
+                            m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 1, 1, 0.5, 0.01, "world");
                         }
-                        else if (val >= 0.0) {
+                        else if (val >= 0.0)
+*/                        {
                             val /= 1.1;
                             KDL::Vector gr;
                             if (r_map->getGradient(pt_W, gr)) {
-                                m_id = markers_pub.addVectorMarker(m_id, pt_W, pt_W + gr*0.03, 0, 1, 0, 1, 0.01, "world");
+                                m_id = markers_pub.addVectorMarker(m_id, pt_W, pt_W + gr*0.015, 0, 1, 0, 1, 0.003, "world");
+                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.003, "world");
                             }
                             else {
-                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.02, "world");
+                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.003, "world");
                             }
-                            m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.01, "world");
                         }
                     }
                 }
             }
-            KDL::Vector rand_pt(randomUniform(lower_bound(0)-1, upper_bound(0)+1), randomUniform(lower_bound(1), upper_bound(1)), randomUniform(lower_bound(2), upper_bound(2)));
-            m_id = markers_pub.addSinglePointMarker(m_id, rand_pt, 1, 0, 0, 0.5, 0.1, "world");
-            int path_length = 0;
-            while (true) {
-                bool use_twist = false;
-                if (use_twist) {
-//                    KDL::Twist twist = distanceMetric(KDL::Frame(rand_pt), KDL::Frame(KDL::Vector(1.05, 0.0, 1.35)), r_map);
-//                    KDL::Vector prev = rand_pt;
-//                    rand_pt = rand_pt + twist.vel * 0.02;
-//                    m_id = markers_pub.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
-                }
-                else {
-                    KDL::Vector gr;
-                    double dist = 0.0;
-                    if (!r_map->getDistnace(rand_pt, dist) || dist < 0.05) {
-                        std::cout << "distance failed" << std::endl;
-                        break;
-                    }
-                    std::vector<ReachabilityMap::GradientInfo > gradients;
-                    gradients.resize(27);
-                    r_map->getAllGradients(rand_pt, gradients);
-                    for (int i=0; i<27; i++) {
-                        if (gradients[i].valid_) {
-                            m_id = markers_pub.addVectorMarker(m_id, rand_pt, rand_pt + gradients[i].direction_*0.02, 0, 0, 1, 1, 0.005, "world");
-                        }
-                    }
 
-                    if (r_map->getGradient(rand_pt, gr)) {
-                        KDL::Vector prev = rand_pt;
-                        rand_pt = rand_pt + gr * 0.02;
-                        m_id = markers_pub.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
+            if (show_path) {
+                KDL::Vector rand_pt(randomUniform(lower_bound(0)-1, upper_bound(0)+1), randomUniform(lower_bound(1), upper_bound(1)), randomUniform(lower_bound(2), upper_bound(2)));
+                m_id = markers_pub.addSinglePointMarker(m_id, rand_pt, 1, 0, 0, 0.5, 0.1, "world");
+                int path_length = 0;
+                while (true) {
+                    bool use_twist = false;
+                    if (use_twist) {
+    //                    KDL::Twist twist = distanceMetric(KDL::Frame(rand_pt), KDL::Frame(KDL::Vector(1.05, 0.0, 1.35)), r_map);
+    //                    KDL::Vector prev = rand_pt;
+    //                    rand_pt = rand_pt + twist.vel * 0.02;
+    //                    m_id = markers_pub.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
                     }
                     else {
-                        std::cout << "gradient failed" << std::endl;
+                        KDL::Vector gr;
+                        double dist = 0.0;
+                        if (!r_map->getDistnace(rand_pt, dist) || dist < 0.05) {
+                            std::cout << "distance failed" << std::endl;
+                            break;
+                        }
+                        std::vector<ReachabilityMap::GradientInfo > gradients;
+                        gradients.resize(27);
+                        r_map->getAllGradients(rand_pt, gradients);
+                        for (int i=0; i<27; i++) {
+                            if (gradients[i].valid_) {
+                                m_id = markers_pub.addVectorMarker(m_id, rand_pt, rand_pt + gradients[i].direction_*0.02, 0, 0, 1, 1, 0.005, "world");
+                            }
+                        }
+
+                        if (r_map->getGradient(rand_pt, gr)) {
+                            KDL::Vector prev = rand_pt;
+                            rand_pt = rand_pt + gr * 0.02;
+                            m_id = markers_pub.addVectorMarker(m_id, prev, rand_pt, 0, 1, 0, 0.5, 0.01, "world");
+                        }
+                        else {
+                            std::cout << "gradient failed" << std::endl;
+                            break;
+                        }
+                    }
+                    path_length++;
+                    if (path_length > 300) {
+                        std::cout << "path length exceeded" << std::endl;
                         break;
                     }
                 }
-                path_length++;
-                if (path_length > 300) {
-                    std::cout << "path length exceeded" << std::endl;
-                    break;
-                }
+                markers_pub.addEraseMarkers(m_id, m_id+300);
             }
-            markers_pub.addEraseMarkers(m_id, m_id+300);
-/*
+
             for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
                 kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
             }
@@ -280,8 +336,8 @@ void showMetric(const KDL::Vector &lower_bound, const KDL::Vector &upper_bound,
             m_id = 15000;
             m_id = addRobotModelVis(markers_pub, m_id, col_model, links_fk);
 
-            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
-*/
+//            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
+
 
             markers_pub.publish();
             ros::spinOnce();
@@ -327,56 +383,74 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         std::vector<int > polygons;
 
         KDL::Frame T_W_WALLS(KDL::Rotation::RotZ(0.0), KDL::Vector(0.4, 0, 0));
-        generateBox(vertices, polygons, 0.2, 2.0, 2.3);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.1, 0.0, 1.15))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(1.1, 0.0, 1.15))) );
+        generateBox(vertices, polygons, 0.2, 2.2, 2.2);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.0, 0.0, 1.1)), "box 0.2 2.2 2.2") );
+        col_array.back()->geometry->setColor(1, 1, 1, 1);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(1.1, 0.0, 1.1)), "box 0.2 2.2 2.2") );
+        col_array.back()->geometry->setColor(1, 1, 1, 1);
 
-        generateBox(vertices, polygons, 2.2, 0.2, 2.3);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 1.0, 1.15))) );
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, -1.0, 1.15))) );
+        generateBox(vertices, polygons, 2.0, 0.2, 2.2);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 1.0, 1.1)), "box 2.0 0.2 2.2") );
+        col_array.back()->geometry->setColor(1, 1, 1, 1);
+        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, -1.0, 1.1)), "box 2.0 0.2 2.2") );
+        col_array.back()->geometry->setColor(1, 1, 1, 1);
 
-        generateBox(vertices, polygons, 2.2, 2.0, 0.2);
+        generateBox(vertices, polygons, 2.4, 2.2, 0.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 0.0, 2.3))) );
 
         // the door
         KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
         generateBox(vertices, polygons, 0.8, 0.1, 2.0);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR, "box 0.8 0.1 2.0") );
+        col_array.back()->geometry->setColor(0.5, 0.2, 0, 1);
         // the lock
         KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
         T_W_LOCK = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK;
         col_array.push_back( self_collision::createCollisionSphere(0.02, T_W_LOCK) );
+        col_array.back()->geometry->setColor(1, 1, 1, 1);
         // the handle
         KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
         generateBox(vertices, polygons, 0.15, 0.05, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR * T_DOOR_HANDLE, "box 0.15 0.05 0.02") );
+        col_array.back()->geometry->setColor(1, 1, 1, 1);
 
         // the bin
         T_W_BIN = KDL::Frame(KDL::Vector(0.2, -0.7, 0.5));
         generateBox(vertices, polygons, 0.02, 0.32, 0.4);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.16, 0.0, 0.2)), "box 0.02 0.32 0.4") );
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(-0.16, 0.0, 0.2)), "box 0.02 0.32 0.4") );
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
 
         generateBox(vertices, polygons, 0.32, 0.02, 0.4);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.16, 0.2)), "box 0.32 0.02 0.4") );
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, -0.16, 0.2)), "box 0.32 0.02 0.4") );
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
 
         generateBox(vertices, polygons, 0.32, 0.32, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.0, 0.0)), "box 0.32 0.32 0.02") );
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
 
         // the cabinet
         KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
         generateBox(vertices, polygons, 0.4, 0.6, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3)), "box 0.4 0.6 0.02") );
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.0)), "box 0.4 0.6 0.02") );
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.3)), "box 0.4 0.6 0.02") );
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
 
         generateBox(vertices, polygons, 0.02, 0.6, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0.2,0,0)), "box 0.02 0.6 0.6") );
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
 
         generateBox(vertices, polygons, 0.4, 0.02, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0)), "box 0.4 0.02 0.6") );
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0)), "box 0.4 0.02 0.6") );
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
 
 }
 
@@ -499,5 +573,62 @@ bool randomizedIkSolution(const boost::shared_ptr<KinematicModel> &kin_model, co
     }
 
     return false;
+}
+
+KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, const boost::shared_ptr<ReachabilityMap > &r_map) {
+        KDL::Twist diff = KDL::diff(F_a_b1, F_a_b2, 1.0);
+        if (diff.vel.Norm() < 0.05) {
+            return diff;
+        }
+//        return diff;
+
+        double dist = (F_a_b1.p - F_a_b2.p).Norm();
+        KDL::Vector gr;
+        if (r_map->getGradient(F_a_b1.p, gr)) {
+            diff.vel = gr * dist;
+//            int m_id = 6000;
+//            m_id = markers_pub_.addVectorMarker(m_id, F_a_b1.p, F_a_b1.p + gr*0.3, 0, 0, 1, 1, 0.005, "world");
+//            markers_pub_.publish();
+//            ros::spinOnce();
+        }
+
+
+        return diff;
+}
+
+void printJointLimits(const Eigen::VectorXd &q, const boost::shared_ptr<KinematicModel> &kin_model, const std::vector<std::string> &joint_names) {
+                    int ndof = q.innerSize();
+                    for (int q_idx = 0; q_idx < ndof; q_idx++) {
+                        double lo = kin_model->getLowerLimit(q_idx), up = kin_model->getUpperLimit(q_idx);
+                        double f = (q(q_idx) - lo) / (up - lo);
+                        int steps = 50;
+                        int step = static_cast<int >(f*steps);
+                        if (step >= steps) {
+                            step = steps-1;
+                        }
+                        for (int s = 0; s < steps; s++) {
+                            std::cout << ((s == step)?"*":".");
+                        }
+                        std::cout << "  ";
+
+                        steps = 3;
+                        step = static_cast<int >(f*steps);
+                        if (step >= steps) {
+                            step = steps-1;
+                        }
+                        for (int s = 0; s < steps; s++) {
+                            std::cout << ((s == step)?"*":".");
+                        }
+
+                        std::cout << "    " << joint_names[q_idx] << std::endl;
+                    }
+}
+
+bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model, double sphereRadius) {
+        // create dummy object
+        boost::shared_ptr< self_collision::Collision > pcol = self_collision::createCollisionSphere(sphereRadius, KDL::Frame(x));
+        KDL::Frame T_B_L1;
+        KDL::Frame T_B_L2;
+        return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
 }
 
