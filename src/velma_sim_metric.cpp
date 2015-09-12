@@ -225,7 +225,7 @@ public:
         sim->updateMetric( boost::bind(&distanceMetric, _1, _2, r_map) );
 
         // TEST: distance metric
-        if (true) {
+        if (false) {
             r_map->printDistanceMap();
             showMetric(q_eq, lower_bound, upper_bound, kin_model, col_model, r_map, markers_pub_);
             return;
@@ -234,6 +234,8 @@ public:
         //
         // add tests
         //
+        KDL::Frame T_W_G_eq;
+        kin_model->calculateFk(T_W_G_eq, effector_name, q_eq);
         KDL::Frame T_W_G_lock = T_W_LOCK * KDL::Frame(KDL::Rotation::RotZ(90.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.0, -0.11, 0.0));
         KDL::Frame T_W_G_bin1 = T_W_BIN * KDL::Frame(KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
         KDL::Frame T_W_G_bin2 = T_W_BIN * KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(180.0/180.0*PI), KDL::Vector(0.0, 0.0, 0.2));
@@ -244,7 +246,22 @@ public:
         KDL::Frame T_W_G_cab5 = KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.8, 0.6, 1.8));
         KDL::Frame T_W_G_weird = KDL::Frame(KDL::Vector(0.7, -0.6, 1.8));
         std::vector<KDL::Frame > vec_T_W_G;
+
+        vec_T_W_G.push_back(T_W_G_eq);
+        vec_T_W_G.push_back(T_W_G_weird);
+
         vec_T_W_G.push_back(T_W_G_lock);
+        vec_T_W_G.push_back(T_W_G_bin1);
+
+        vec_T_W_G.push_back(T_W_G_bin1);
+        vec_T_W_G.push_back(T_W_G_bin2);
+
+        vec_T_W_G.push_back(T_W_G_cab1);
+        vec_T_W_G.push_back(T_W_G_cab2);
+
+        vec_T_W_G.push_back(T_W_G_lock);
+        vec_T_W_G.push_back(T_W_G_cab2);
+/*
         vec_T_W_G.push_back(T_W_G_bin1);
         vec_T_W_G.push_back(T_W_G_bin2);
         vec_T_W_G.push_back(T_W_G_cab1);    // g
@@ -253,9 +270,10 @@ public:
         vec_T_W_G.push_back(T_W_G_cab4);    // gg
         vec_T_W_G.push_back(T_W_G_cab5);    // l
         vec_T_W_G.push_back(T_W_G_weird);
+*/
 
         TestScenario ts;
-///*
+/*
         // single movements from the same configuration
         ts.addNode(T_W_G_weird, q_eq, false);
         ts.addNode(T_W_G_lock, q_eq, false);
@@ -295,7 +313,7 @@ public:
         double q_cab_g_tab[] = {0.890049,    2.28463,   -1.47813,    2.19092,    1.46628,   0.186504,  -0.785303,  -0.501551,     1.4145,    1.68104,   -1.44994,    -1.6063, 0.00322741,     1.5708,    -1.5708};
         ts.addNode(T_W_G_cab2, q_cab_g_tab, ndof, false);
 
-        // lock -> cab_g
+        // lock -> cab_d
         ts.addNode(T_W_G_cab2, q_lock1_tab, ndof, false);
 
 
