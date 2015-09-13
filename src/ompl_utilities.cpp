@@ -62,7 +62,7 @@ void VelmaRightGripperIkGoal::sampleGoal (ompl::base::State *st) const {
             if (randomizedIkSolution(kin_model_, T_W_G_dest_, ik_q)) {
                 stateEigenToOmpl(ik_q, st, ndof_);
                 if (svc_(st)){
-                    //std::cout << "found ik solution" << std::endl;
+                    std::cout << "VelmaRightGripperIkGoal::sampleGoal: found ik solution" << std::endl;
                     break;
                 }
             }

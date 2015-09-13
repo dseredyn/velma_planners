@@ -323,9 +323,9 @@ public:
         TestResults tr;
 
         std::vector<std::string > planner_names;
-        planner_names.push_back("sim");
+//        planner_names.push_back("sim");
 //        planner_names.push_back("RRT*");
-//        planner_names.push_back("RRT-Connect");
+        planner_names.push_back("RRT-Connect");
 
         double rrt_max_time = 50.0;
 
@@ -333,7 +333,7 @@ public:
             std::string planner_name = planner_names[planner_idx];
             std::cout << "planner_name: " << planner_name << std::endl;
 
-            for (int try_idx = 0; try_idx < 20; try_idx++) {
+            for (int try_idx = 0; try_idx < 1; try_idx++) {
                 std::cout << "try_idx: " << try_idx << std::endl;
                 //
                 // OMPL RRT

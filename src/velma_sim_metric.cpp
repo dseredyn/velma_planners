@@ -225,7 +225,7 @@ public:
         sim->updateMetric( boost::bind(&distanceMetric, _1, _2, r_map) );
 
         // TEST: distance metric
-        if (true) {
+        if (false) {
             r_map->printDistanceMap();
             showMetric(q_eq, lower_bound, upper_bound, kin_model, col_model, r_map, markers_pub_);
             return;
@@ -255,7 +255,7 @@ public:
         vec_T_W_G.push_back(T_W_G_weird);
 
         TestScenario ts;
-///*
+/*
         // single movements from the same configuration
         ts.addNode(T_W_G_weird, q_eq, false);
         ts.addNode(T_W_G_lock, q_eq, false);
@@ -279,7 +279,7 @@ public:
         ts.addNode(T_W_G_cab2, q_eq, true);
         ts.addNode(T_W_G_cab4, q_eq, true);
 //*/
-
+/*
         // impossible move
         ts.addNode(T_W_G_weird, q_eq, false);
 
@@ -297,7 +297,13 @@ public:
 
         // lock -> cab_g
         ts.addNode(T_W_G_cab2, q_lock1_tab, ndof, false);
+*/
 
+        // impossible move 2
+        KDL::Frame T_W_G_weird2 = KDL::Frame(KDL::Rotation::RotX(160.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.6, -0.4, 1.8));
+        ts.addNode(T_W_G_weird2, q_eq, false);
+
+//        ts.addNode(T_W_G_cab1, q_eq, false);
 
         ros::Duration(1.0).sleep();
 
@@ -339,7 +345,7 @@ public:
             }
             loop_counter += 1;
 
-            sim->oneStep();//&markers_pub_, 3000);
+            sim->oneStep(&markers_pub_, 3000);
             if (sim->inCollision() && !collision_in_prev_step) {
                 collision_in_prev_step = true;
                 std::cout << "collision begin" << std::endl;
@@ -394,12 +400,12 @@ public:
                 markers_pub_.clear();
             }
             ros::spinOnce();
-//            loop_rate.sleep();
+            loop_rate.sleep();
 //            ros::Duration(1.0).sleep();
 //            return;
         }
 
-
+        return;
         for (int i=0; i<10; i++) {
             // calculate forward kinematics for all links
             for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {

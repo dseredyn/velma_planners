@@ -398,6 +398,11 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         generateBox(vertices, polygons, 2.4, 2.2, 0.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 0.0, 2.3))) );
 
+        // the column
+//        generateBox(vertices, polygons, 0.1, 0.1, 2.2);
+//        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.2, -0.2, 1.1)), "box 0.1 0.1 2.2") );
+//        col_array.back()->geometry->setColor(1.0, 0.0, 0.0, 1);
+
         // the door
         KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
         generateBox(vertices, polygons, 0.8, 0.1, 2.0);
@@ -415,7 +420,7 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         col_array.back()->geometry->setColor(1, 1, 1, 1);
 
         // the bin
-        T_W_BIN = KDL::Frame(KDL::Vector(0.2, -0.7, 0.5));
+/*        T_W_BIN = KDL::Frame(KDL::Vector(0.2, -0.7, 0.5));
         generateBox(vertices, polygons, 0.02, 0.32, 0.4);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.16, 0.0, 0.2)), "box 0.02 0.32 0.4") );
         col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
@@ -431,9 +436,9 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         generateBox(vertices, polygons, 0.32, 0.32, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.0, 0.0)), "box 0.32 0.32 0.02") );
         col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
-
+*/
         // the cabinet
-        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
+/*        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
         generateBox(vertices, polygons, 0.4, 0.6, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3)), "box 0.4 0.6 0.02") );
         col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
@@ -451,7 +456,7 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0)), "box 0.4 0.02 0.6") );
         col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
-
+*/
 }
 
 bool randomizedIkSolution(const boost::shared_ptr<KinematicModel> &kin_model, const KDL::Frame &T_W_G_dest, Eigen::VectorXd &q) {
