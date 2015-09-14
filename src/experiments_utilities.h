@@ -36,6 +36,7 @@
 #include "ros/package.h"
 #include <sensor_msgs/JointState.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <interactive_markers/interactive_marker_server.h>
 
 #include <string>
 #include <stdlib.h>
@@ -120,6 +121,8 @@ KDL::Twist distanceMetric(const KDL::Frame &F_a_b1, const KDL::Frame &F_a_b2, co
 void printJointLimits(const Eigen::VectorXd &q, const boost::shared_ptr<KinematicModel> &kin_model, const std::vector<std::string> &joint_names);
 
 bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision::CollisionModel> &col_model, double sphereRadius);
+
+void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool fixed, unsigned int interaction_mode, const KDL::Frame &T_W_M, bool show_6dof, interactive_markers::InteractiveMarkerServer::FeedbackCallback feedback_cb );
 
 #endif  // EXPERIMENT_UTILITIES_H__
 

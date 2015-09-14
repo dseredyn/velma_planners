@@ -63,6 +63,7 @@ class TestDynamicModel {
     ros::Publisher joint_state_pub_;
     MarkerPublisher markers_pub_;
     tf::TransformBroadcaster br;
+    KDL::Frame int_marker_pose_;
 
     const double PI;
 
@@ -76,6 +77,12 @@ public:
     }
 
     ~TestDynamicModel() {
+    }
+
+    void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback )
+    {
+        int_marker_pose_ = KDL::Frame(KDL::Rotation::Quaternion(feedback->pose.orientation.x, feedback->pose.orientation.y, feedback->pose.orientation.z, feedback->pose.orientation.w), KDL::Vector(feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z));
+        printFrameKDL(int_marker_pose_);
     }
 
     void spin() {
@@ -222,8 +229,6 @@ public:
             std::cout << "created distance map" << std::endl;
         }
 
-        sim->updateMetric( boost::bind(&distanceMetric, _1, _2, r_map) );
-
         // TEST: distance metric
         if (false) {
             r_map->printDistanceMap();
@@ -284,7 +289,8 @@ public:
         ts.addNode(T_W_G_cab3, q_eq, false);
         ts.addNode(T_W_G_cab4, q_eq, false);
         ts.addNode(T_W_G_cab5, q_eq, false);
-
+*/
+/*
         // sequence of movements
         ts.addNode(T_W_G_lock, q_eq, false);
         ts.addNode(T_W_G_bin1, q_eq, true);
@@ -315,53 +321,114 @@ public:
 
         // lock -> cab_d
         ts.addNode(T_W_G_cab2, q_lock1_tab, ndof, false);
-*/
+//*/
+
+        // jlc
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.412733, -0.330106, 1.12433)), q_eq, false);
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.442317, -0.298677, 1.56104)), q_eq, true);
+
+
+        // wcc
+//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.560519, 0.459226, 0.568173, 0.390013), KDL::Vector(0.412231, -0.345436, 1.12546)), q_eq, true);
+//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.644694, -0.19067, 0.705233, -0.22508), KDL::Vector(0.412231, -0.345436, 1.12546)), q_eq, true);
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.289029, -0.484604, 0.730593, -0.38452), KDL::Vector(0.52431, -0.466663, 1.38939)), q_eq, true);
+
+
+        // col
+//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(0.412231, -0.345436, 1.12546)), q_eq, true);
+//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(0.119307, -0.0183768, 1.12177)), q_eq, true);
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.466042, 0.488403, 0.728058, 0.119158), KDL::Vector(0.0355551, 0.248136, 1.46636)), q_eq, true);
+
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(1.05653, -0.109096, 1.14599)), q_eq, true);
+
 
         // impossible move 2
-        KDL::Frame T_W_G_weird2 = KDL::Frame(KDL::Rotation::RotX(160.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.6, -0.4, 1.8));
-        ts.addNode(T_W_G_weird2, q_eq, false);
+//        KDL::Frame T_W_G_weird2 = KDL::Frame(KDL::Rotation::RotX(160.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.6, -0.4, 1.8));
+//        ts.addNode(T_W_G_weird2, q_eq, false);
 
 //        ts.addNode(T_W_G_cab1, q_eq, false);
 
-        ros::Duration(1.0).sleep();
+        // show the initial configuration for 2 seconds.
+        for (int i=0; i<20; i++) {
+            // calculate forward kinematics for all links
+            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q_eq);
+            }
+            publishJointState(joint_state_pub_, q_eq, joint_names, ign_q, ign_joint_names);
+            int m_id = 0;
+            m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+            markers_pub_.publish();
+            ros::spinOnce();
+            ros::Duration(0.1).sleep();
+        }
+
+//        ros::Duration(1.0).sleep();
 
         ts.startTest();
 
+//        std::string mode("int_marker");
+        std::string mode("target");
+
+        if (mode == "int_marker") {
+            sim->updateMetric( boost::bind(static_cast<KDL::Twist (*)(const KDL::Frame &, const KDL::Frame &, double)>(&KDL::diff), _1, _2, 1.0) );
+        }
+        else if (mode == "target") {
+            sim->updateMetric( boost::bind(&distanceMetric, _1, _2, r_map) );
+        }
+
         KDL::Vector prev_E_pt;
         int ee_traj_m_id = 6000;
+
+        sim->setState(q, dq, ddq);
+
+        kin_model->calculateFk(r_HAND_target, effector_name, q_eq);
+
+        interactive_markers::InteractiveMarkerServer server("simple_marker");
+        int_marker_pose_ = r_HAND_target;
+        make6DofMarker(server, false, visualization_msgs::InteractiveMarkerControl::MOVE_ROTATE_3D, r_HAND_target, true, boost::bind(&TestDynamicModel::processFeedback, this, _1));
+        server.applyChanges();
 
         bool collision_in_prev_step = false;
         bool stop = false;
         while (ros::ok() && !stop) {
 
-            if (loop_counter > 1500*4) {
-                    if (ts.isFinished()) {
-                        break;
-                    }
-
-                    r_HAND_target = ts.getDestFrame();
-                    if (!ts.usePrevQ()) {
-                        q = ts.getInitQ();
-                        dq.setZero();
-                        ddq.setZero();
-                        sim->setState(q, dq, ddq);
-                    }
-
-                    std::cout << "q: " << q.transpose() << std::endl;
-                    ts.nextNode();
-
-                    sim->setTarget(r_HAND_target);
-
-                    if (!r_map->createDistanceMap(r_HAND_target.p, boost::bind(&checkCollision, _1, col_model, 0.04), lower_bound, upper_bound)) {
-                        std::cout << "could not create the distance map" << std::endl;
-                    }
-                    else {
-                        std::cout << "created distance map" << std::endl;
-                    }
-
-                    loop_counter = 0;
+            if (mode == "int_marker") {
+                r_HAND_target = int_marker_pose_;
+                sim->setTarget(r_HAND_target);
             }
-            loop_counter += 1;
+            else if (mode == "target") {
+                if (loop_counter > 1500*3) {
+                        if (ts.isFinished()) {
+                            break;
+                        }
+
+                        r_HAND_target = ts.getDestFrame();
+                        if (!ts.usePrevQ()) {
+                            q = ts.getInitQ();
+                            dq.setZero();
+                            ddq.setZero();
+                            dq(4) = 5.0;
+                            q(4) = 20.0/180.0*PI;
+
+                            sim->setState(q, dq, ddq);
+                        }
+
+                        std::cout << "q: " << q.transpose() << std::endl;
+                        ts.nextNode();
+
+                        sim->setTarget(r_HAND_target);
+
+                        if (!r_map->createDistanceMap(r_HAND_target.p, boost::bind(&checkCollision, _1, col_model, 0.04), lower_bound, upper_bound)) {
+                            std::cout << "could not create the distance map" << std::endl;
+                        }
+                        else {
+                            std::cout << "created distance map" << std::endl;
+                        }
+
+                        loop_counter = 0;
+                }
+                loop_counter += 1;
+            }
 
             sim->oneStep(&markers_pub_, 3000);
             if (sim->inCollision() && !collision_in_prev_step) {
@@ -386,10 +453,12 @@ public:
                 markers_pub_.publish();
             }
 
-            KDL::Twist diff = KDL::diff(r_HAND_target, current_T_B_E);
-            if (diff.vel.Norm() < 0.015 && diff.rot.Norm() < 5.0/180.0*PI) {
-                std::cout << "goal reached" << std::endl;
-                loop_counter = 100000;
+            if (mode == "target") {
+                KDL::Twist diff = KDL::diff(r_HAND_target, current_T_B_E);
+                if (diff.vel.Norm() < 0.015 && diff.rot.Norm() < 5.0/180.0*PI) {
+                    std::cout << "goal reached" << std::endl;
+                    loop_counter = 100000;
+                }
             }
 
             // publish markers and robot state with limited rate

@@ -383,80 +383,84 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         std::vector<int > polygons;
 
         KDL::Frame T_W_WALLS(KDL::Rotation::RotZ(0.0), KDL::Vector(0.4, 0, 0));
+/*
+        double wall_r = 1.0, wall_g = 1.0, wall_b = 1.0;
         generateBox(vertices, polygons, 0.2, 2.2, 2.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.0, 0.0, 1.1)), "box 0.2 2.2 2.2") );
-        col_array.back()->geometry->setColor(1, 1, 1, 1);
+//        col_array.back()->geometry->setColor(1, 1, 1, 1);
+        col_array.back()->geometry->setColor(wall_r+0.2, wall_g+0.2, wall_b+0.2, 1);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(1.1, 0.0, 1.1)), "box 0.2 2.2 2.2") );
-        col_array.back()->geometry->setColor(1, 1, 1, 1);
+        col_array.back()->geometry->setColor(wall_r+0.2, wall_g+0.2, wall_b+0.2, 1);
 
         generateBox(vertices, polygons, 2.0, 0.2, 2.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 1.0, 1.1)), "box 2.0 0.2 2.2") );
-        col_array.back()->geometry->setColor(1, 1, 1, 1);
+        col_array.back()->geometry->setColor(wall_r, wall_g, wall_b+0.1, 1);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, -1.0, 1.1)), "box 2.0 0.2 2.2") );
-        col_array.back()->geometry->setColor(1, 1, 1, 1);
+        col_array.back()->geometry->setColor(wall_r+0.3, wall_g+0.3, wall_b+0.3, 1);
 
         generateBox(vertices, polygons, 2.4, 2.2, 0.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 0.0, 2.3))) );
-
         // the column
 //        generateBox(vertices, polygons, 0.1, 0.1, 2.2);
 //        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.2, -0.2, 1.1)), "box 0.1 0.1 2.2") );
 //        col_array.back()->geometry->setColor(1.0, 0.0, 0.0, 1);
-
+*/
         // the door
         KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
+        KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
+        KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
+        T_W_LOCK = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK;
+        T_W_BIN = KDL::Frame(KDL::Vector(0.2, -0.7, 0.5));
+        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
+/*
         generateBox(vertices, polygons, 0.8, 0.1, 2.0);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR, "box 0.8 0.1 2.0") );
         col_array.back()->geometry->setColor(0.5, 0.2, 0, 1);
         // the lock
-        KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
-        T_W_LOCK = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK;
         col_array.push_back( self_collision::createCollisionSphere(0.02, T_W_LOCK) );
         col_array.back()->geometry->setColor(1, 1, 1, 1);
         // the handle
-        KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
         generateBox(vertices, polygons, 0.15, 0.05, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR * T_DOOR_HANDLE, "box 0.15 0.05 0.02") );
-        col_array.back()->geometry->setColor(1, 1, 1, 1);
-
-        // the bin
-/*        T_W_BIN = KDL::Frame(KDL::Vector(0.2, -0.7, 0.5));
+        col_array.back()->geometry->setColor(0.7, 0.7, 0.7, 1);
+*/
+/*        // the bin
         generateBox(vertices, polygons, 0.02, 0.32, 0.4);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.16, 0.0, 0.2)), "box 0.02 0.32 0.4") );
-        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(-0.16, 0.0, 0.2)), "box 0.02 0.32 0.4") );
-        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
 
         generateBox(vertices, polygons, 0.32, 0.02, 0.4);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.16, 0.2)), "box 0.32 0.02 0.4") );
-        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, -0.16, 0.2)), "box 0.32 0.02 0.4") );
-        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
 
         generateBox(vertices, polygons, 0.32, 0.32, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.0, 0.0)), "box 0.32 0.32 0.02") );
-        col_array.back()->geometry->setColor(0.5, 0.5, 0, 0.5);
+        col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
 */
         // the cabinet
-/*        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
+        double cabinet_a=0.5;
         generateBox(vertices, polygons, 0.4, 0.6, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3)), "box 0.4 0.6 0.02") );
-        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.0)), "box 0.4 0.6 0.02") );
-        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,0.3)), "box 0.4 0.6 0.02") );
-        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
 
         generateBox(vertices, polygons, 0.02, 0.6, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0.2,0,0)), "box 0.02 0.6 0.6") );
-        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
 
         generateBox(vertices, polygons, 0.4, 0.02, 0.6);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,-0.3,0)), "box 0.4 0.02 0.6") );
-        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0)), "box 0.4 0.02 0.6") );
-        col_array.back()->geometry->setColor(0, 0.5, 0.5, 0.5);
-*/
+        col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
+
 }
 
 bool randomizedIkSolution(const boost::shared_ptr<KinematicModel> &kin_model, const KDL::Frame &T_W_G_dest, Eigen::VectorXd &q) {
@@ -635,5 +639,113 @@ bool checkCollision(const KDL::Vector &x, const boost::shared_ptr<self_collision
         KDL::Frame T_B_L1;
         KDL::Frame T_B_L2;
         return self_collision::checkCollision(pcol, T_B_L1, col_model->getLink(col_model->getLinkIndex("env_link")), T_B_L2);
+}
+
+visualization_msgs::Marker makeBox( visualization_msgs::InteractiveMarker &msg )
+{
+  visualization_msgs::Marker marker;
+
+  marker.type = visualization_msgs::Marker::CUBE;
+  marker.scale.x = msg.scale * 0.05;
+  marker.scale.y = msg.scale * 0.05;
+  marker.scale.z = msg.scale * 0.05;
+  marker.color.r = 1.0;
+  marker.color.g = 1.0;
+  marker.color.b = 1.0;
+  marker.color.a = 1.0;
+
+  return marker;
+}
+
+visualization_msgs::InteractiveMarkerControl& makeBoxControl( visualization_msgs::InteractiveMarker &msg )
+{
+  visualization_msgs::InteractiveMarkerControl control;
+  control.always_visible = true;
+  control.markers.push_back( makeBox(msg) );
+  msg.controls.push_back( control );
+
+  return msg.controls.back();
+}
+
+void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool fixed, unsigned int interaction_mode, const KDL::Frame &T_W_M, bool show_6dof, interactive_markers::InteractiveMarkerServer::FeedbackCallback feedback_cb )
+{
+  visualization_msgs::InteractiveMarker int_marker;
+  int_marker.header.frame_id = "world";
+  tf::Vector3 pos(T_W_M.p.x(), T_W_M.p.y(), T_W_M.p.z());
+  double qx,qy,qz,qw;
+  T_W_M.M.GetQuaternion(qx,qy,qz,qw);
+  tf::Quaternion ori(qx,qy,qz,qw);
+  tf::Transform pose(ori, pos);
+  tf::poseTFToMsg(pose, int_marker.pose);
+  int_marker.scale = 0.2;
+
+  int_marker.name = "simple_6dof";
+  int_marker.description = "Simple 6-DOF Control";
+
+  // insert a box
+  makeBoxControl(int_marker);
+  int_marker.controls[0].interaction_mode = interaction_mode;
+
+  visualization_msgs::InteractiveMarkerControl control;
+
+  if ( fixed )
+  {
+    int_marker.name += "_fixed";
+    int_marker.description += "\n(fixed orientation)";
+    control.orientation_mode = visualization_msgs::InteractiveMarkerControl::FIXED;
+  }
+
+  if (interaction_mode != visualization_msgs::InteractiveMarkerControl::NONE)
+  {
+      std::string mode_text;
+      if( interaction_mode == visualization_msgs::InteractiveMarkerControl::MOVE_3D )         mode_text = "MOVE_3D";
+      if( interaction_mode == visualization_msgs::InteractiveMarkerControl::ROTATE_3D )       mode_text = "ROTATE_3D";
+      if( interaction_mode == visualization_msgs::InteractiveMarkerControl::MOVE_ROTATE_3D )  mode_text = "MOVE_ROTATE_3D";
+      int_marker.name += "_" + mode_text;
+      int_marker.description = std::string("3D Control") + (show_6dof ? " + 6-DOF controls" : "") + "\n" + mode_text;
+  }
+
+  if(show_6dof)
+  {
+    control.orientation.w = 1;
+    control.orientation.x = 1;
+    control.orientation.y = 0;
+    control.orientation.z = 0;
+    control.name = "rotate_x";
+    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
+    int_marker.controls.push_back(control);
+    control.name = "move_x";
+    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
+    int_marker.controls.push_back(control);
+
+    control.orientation.w = 1;
+    control.orientation.x = 0;
+    control.orientation.y = 1;
+    control.orientation.z = 0;
+    control.name = "rotate_z";
+    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
+    int_marker.controls.push_back(control);
+    control.name = "move_z";
+    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
+    int_marker.controls.push_back(control);
+
+    control.orientation.w = 1;
+    control.orientation.x = 0;
+    control.orientation.y = 0;
+    control.orientation.z = 1;
+    control.name = "rotate_y";
+    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
+    int_marker.controls.push_back(control);
+    control.name = "move_y";
+    control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
+    int_marker.controls.push_back(control);
+  }
+
+  server.insert(int_marker);
+
+  server.setCallback(int_marker.name, feedback_cb );
+//  server.setCallback(int_marker.name, boost::bind(&TestDynamicModel::processFeedback, this, _1) );
+//  if (interaction_mode != visualization_msgs::InteractiveMarkerControl::NONE)
+//    menu_handler.apply( server, int_marker.name );
 }
 

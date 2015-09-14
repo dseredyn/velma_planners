@@ -129,9 +129,6 @@ public:
     void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback )
     {
         int_marker_pose_ = KDL::Frame(KDL::Rotation::Quaternion(feedback->pose.orientation.x, feedback->pose.orientation.y, feedback->pose.orientation.z, feedback->pose.orientation.w), KDL::Vector(feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z));
-//      ROS_INFO_STREAM( feedback->marker_name << " is now at "
-//          << feedback->pose.position.x << ", " << feedback->pose.position.y
-//          << ", " << feedback->pose.position.z );
     }
 
 visualization_msgs::Marker makeBox( visualization_msgs::InteractiveMarker &msg )
@@ -786,8 +783,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         int_marker_pose_ = r_HAND_target;
         // create an interactive marker server on the topic namespace simple_marker
         interactive_markers::InteractiveMarkerServer server("simple_marker");
-        tf::Vector3 position;
-        position = tf::Vector3( 0, 0, 0);
+//        tf::Vector3 position;
+//        position = tf::Vector3( 0, 0, 0);
         make6DofMarker(server, false, visualization_msgs::InteractiveMarkerControl::MOVE_ROTATE_3D, r_HAND_target, true);
         // 'commit' changes and send to all clients
         server.applyChanges();
