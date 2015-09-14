@@ -324,7 +324,7 @@ public:
 //*/
 
         // jlc
-        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.412733, -0.330106, 1.12433)), q_eq, false);
+//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.412733, -0.330106, 1.12433)), q_eq, false);
         ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.442317, -0.298677, 1.56104)), q_eq, true);
 
 
@@ -397,7 +397,7 @@ public:
                 sim->setTarget(r_HAND_target);
             }
             else if (mode == "target") {
-                if (loop_counter > 1500*3) {
+                if (loop_counter > 1500*2) {
                         if (ts.isFinished()) {
                             break;
                         }
