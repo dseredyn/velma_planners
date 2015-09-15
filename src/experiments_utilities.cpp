@@ -238,44 +238,56 @@ void showMetric(const Eigen::VectorXd &q, const KDL::Vector &lower_bound, const 
         std::vector<KDL::Frame > links_fk(col_model->getLinksCount());
 
         bool show_path = false;
-
+/*
 //        double z = 1.2;
-        double y = -0.24;
+        double y = -0.5;
         while (ros::ok()) {
             int m_id = 0;
-
+            if (y > 0.5) {
+                break;
+            }
 //            z += 0.025;
-            y += 0.04;
+            y += 0.01;
 //            for (double x = lower_bound(0)+0.02; x < upper_bound(0); x += 0.01) {
-            for (double x = 0.7; x < 1.2; x += 0.01) {
+            for (double x = 0.7; x < 1.8; x += 0.01) {
                 {
 //                    double y = 0.0;
 //                for (double y = lower_bound(1)+0.0125; y < upper_bound(1); y += 0.04) {
 //                    for (double z = lower_bound(2)+0.02; z < upper_bound(2); z += 0.01)
-                    for (double z = 1.5; z < 2.1; z += 0.01)
+                    for (double z = 1.0; z < 2.1; z += 0.01)
                     {
 //                        double z = 1.4;
-                        KDL::Vector pt_W(x,y,z);
+                        KDL::Vector pt_W(x-0.02,y-0.02,z-0.02);
                         double val = 0.0;
-/*                        if (!r_map->getDistnace(pt_W, val)) {   
-                            m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 0, 0.5, 0.01, "world");
-                        }
-                        else if (val == -1.0) {
-                            m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, 1, 0, 0.5, 0.01, "world");
-                        }
-                        else if (val == -2.0) {
-                            m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 1, 1, 0.5, 0.01, "world");
-                        }
-                        else if (val >= 0.0)
-*/                        {
+                        {
                             val /= 1.1;
                             KDL::Vector gr;
                             if (r_map->getGradient(pt_W, gr)) {
-                                m_id = markers_pub.addVectorMarker(m_id, pt_W, pt_W + gr*0.015, 0, 1, 0, 1, 0.003, "world");
-                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.003, "world");
+                                double dist = 0.0;
+                                r_map->getDistance(pt_W, dist);
+                                dist = dist * 0.1;
+
+                                double cr=1.0, cg=1.0, cb=1.0;
+                                if (dist > 0) {
+                                    cb -= std::min(1.0, dist);
+                                    dist -= 1.0;
+                                }
+                                if (dist > 0) {
+                                    cg -= std::min(1.0, dist);
+                                    dist -= 1.0;
+                                }
+                                if (dist > 0) {
+                                    cr -= std::min(1.0, dist);
+                                    dist -= 1.0;
+                                }
+
+                                m_id = markers_pub.addSinglePointMarkerCube(m_id, pt_W+KDL::Vector(0.02, 0.02, 0.02), cr, cg, cb, 0.9, 0.01, 0.0001, 0.01, "world");
+
+//                                m_id = markers_pub.addVectorMarker(m_id, pt_W, pt_W + gr*0.020, cr, cg, cb, 1, 0.006, "world");
+//                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.003, "world");
                             }
                             else {
-                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0.5, 0.003, "world");
+                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0, 0.003, "world");
                             }
                         }
                     }
@@ -297,7 +309,7 @@ void showMetric(const Eigen::VectorXd &q, const KDL::Vector &lower_bound, const 
                     else {
                         KDL::Vector gr;
                         double dist = 0.0;
-                        if (!r_map->getDistnace(rand_pt, dist) || dist < 0.05) {
+                        if (!r_map->getDistance(rand_pt, dist) || dist < 0.05) {
                             std::cout << "distance failed" << std::endl;
                             break;
                         }
@@ -306,7 +318,7 @@ void showMetric(const Eigen::VectorXd &q, const KDL::Vector &lower_bound, const 
                         r_map->getAllGradients(rand_pt, gradients);
                         for (int i=0; i<27; i++) {
                             if (gradients[i].valid_) {
-                                m_id = markers_pub.addVectorMarker(m_id, rand_pt, rand_pt + gradients[i].direction_*0.02, 0, 0, 1, 1, 0.005, "world");
+                                m_id = markers_pub.addVectorMarker(m_id, rand_pt, rand_pt + gradients[i].direction_*0.02, 0, 0, 1, 0.5, 0.005, "world");
                             }
                         }
 
@@ -341,9 +353,82 @@ void showMetric(const Eigen::VectorXd &q, const KDL::Vector &lower_bound, const 
 
             markers_pub.publish();
             ros::spinOnce();
-            ros::Duration(0.5).sleep();
-            getchar();
+            ros::Duration(0.02).sleep();
+//            getchar();
         }
+*/
+//        double z = 1.2;
+        double x = 0.7;
+        while (ros::ok()) {
+            int m_id = 0;
+            if (x > 1.9) {
+                break;
+            }
+//            z += 0.025;
+            x += 0.01;
+//            for (double x = lower_bound(0)+0.02; x < upper_bound(0); x += 0.01) {
+//            for (double x = 0.7; x < 1.6; x += 0.02) {
+            {
+//                    double y = 0.0;
+//                for (double y = lower_bound(1)+0.0125; y < upper_bound(1); y += 0.04) {
+                for (double y = -0.5; y < 0.5; y += 0.01) {
+//                    for (double z = lower_bound(2)+0.02; z < upper_bound(2); z += 0.01)
+                    for (double z = 1.0; z < 2.1; z += 0.01)
+                    {
+//                        double z = 1.4;
+                        KDL::Vector pt_W(x,y,z);
+                        double val = 0.0;
+                        {
+                            val /= 1.1;
+                            KDL::Vector gr;
+                            if (r_map->getGradient(pt_W, gr)) {
+                                double dist = 0.0;
+                                r_map->getDistance(pt_W, dist);
+                                dist = dist * 0.1;
+
+                                double cr=1.0, cg=1.0, cb=1.0;
+                                if (dist > 0) {
+                                    cb -= std::min(1.0, dist);
+                                    dist -= 1.0;
+                                }
+                                if (dist > 0) {
+                                    cg -= std::min(1.0, dist);
+                                    dist -= 1.0;
+                                }
+                                if (dist > 0) {
+                                    cr -= std::min(1.0, dist);
+                                    dist -= 1.0;
+                                }
+
+                                m_id = markers_pub.addSinglePointMarkerCube(m_id, pt_W+KDL::Vector(0.02, 0.02, 0.02), cr, cg, cb, 0.9, 0.0001, 0.01, 0.01, "world");
+//                                m_id = markers_pub.addVectorMarker(m_id, pt_W, pt_W + gr*0.020, cr, cg, cb, 1, 0.006, "world");
+//                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 1, val, val, 0.5, 0.003, "world");
+                            }
+                            else {
+                                m_id = markers_pub.addSinglePointMarker(m_id, pt_W, 0, 0, 1, 0, 0.003, "world");
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
+                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
+            }
+
+            m_id = 15000;
+            m_id = addRobotModelVis(markers_pub, m_id, col_model, links_fk);
+
+//            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
+
+
+            markers_pub.publish();
+            ros::spinOnce();
+            ros::Duration(0.02).sleep();
+//            getchar();
+        }
+
+        ros::Duration(3.0).sleep();
 }
 
 void generateBox(std::vector<KDL::Vector > &vertices, std::vector<int> &polygons, double size_x, double size_y, double size_z) {
@@ -383,10 +468,18 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         std::vector<int > polygons;
 
         KDL::Frame T_W_WALLS(KDL::Rotation::RotZ(0.0), KDL::Vector(0.4, 0, 0));
-/*
+        KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
+        KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
+        KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
+        T_W_LOCK = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK;
+        T_W_BIN = KDL::Frame(KDL::Vector(0.23, -0.7, 0.5));
+//        KDL::Frame T_W_C(KDL::Vector(1.0,0,1.5));
+        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
+
+
         double wall_r = 1.0, wall_g = 1.0, wall_b = 1.0;
         generateBox(vertices, polygons, 0.2, 2.2, 2.2);
-        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.0, 0.0, 1.1)), "box 0.2 2.2 2.2") );
+/*        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(-1.0, 0.0, 1.1)), "box 0.2 2.2 2.2") );
 //        col_array.back()->geometry->setColor(1, 1, 1, 1);
         col_array.back()->geometry->setColor(wall_r+0.2, wall_g+0.2, wall_b+0.2, 1);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(1.1, 0.0, 1.1)), "box 0.2 2.2 2.2") );
@@ -397,21 +490,15 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         col_array.back()->geometry->setColor(wall_r, wall_g, wall_b+0.1, 1);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, -1.0, 1.1)), "box 2.0 0.2 2.2") );
         col_array.back()->geometry->setColor(wall_r+0.3, wall_g+0.3, wall_b+0.3, 1);
-
         generateBox(vertices, polygons, 2.4, 2.2, 0.2);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.0, 0.0, 2.3))) );
+*/
         // the column
 //        generateBox(vertices, polygons, 0.1, 0.1, 2.2);
 //        col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * KDL::Frame(KDL::Vector(0.2, -0.2, 1.1)), "box 0.1 0.1 2.2") );
 //        col_array.back()->geometry->setColor(1.0, 0.0, 0.0, 1);
-*/
+
         // the door
-        KDL::Frame T_WALLS_DOOR(KDL::Vector(0.2, 0.92, 1.0));
-        KDL::Frame T_DOOR_LOCK(KDL::Vector(-0.3, -0.05, 0.1));
-        KDL::Frame T_DOOR_HANDLE(KDL::Vector(-0.25, -0.075, 0.2));
-        T_W_LOCK = T_W_WALLS * T_WALLS_DOOR * T_DOOR_LOCK;
-        T_W_BIN = KDL::Frame(KDL::Vector(0.2, -0.7, 0.5));
-        KDL::Frame T_W_C(KDL::Vector(1.2,0,1.5));
 /*
         generateBox(vertices, polygons, 0.8, 0.1, 2.0);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR, "box 0.8 0.1 2.0") );
@@ -423,8 +510,8 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         generateBox(vertices, polygons, 0.15, 0.05, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_WALLS * T_WALLS_DOOR * T_DOOR_HANDLE, "box 0.15 0.05 0.02") );
         col_array.back()->geometry->setColor(0.7, 0.7, 0.7, 1);
-*/
-/*        // the bin
+//*/
+//*        // the bin
         generateBox(vertices, polygons, 0.02, 0.32, 0.4);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.16, 0.0, 0.2)), "box 0.02 0.32 0.4") );
         col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
@@ -440,9 +527,10 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         generateBox(vertices, polygons, 0.32, 0.32, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_BIN * KDL::Frame(KDL::Vector(0.0, 0.0, 0.0)), "box 0.32 0.32 0.02") );
         col_array.back()->geometry->setColor(0.5, 0.5, 0, 1);
-*/
+//*/
         // the cabinet
-        double cabinet_a=0.5;
+//*
+        double cabinet_a=1.0;
         generateBox(vertices, polygons, 0.4, 0.6, 0.02);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0,-0.3)), "box 0.4 0.6 0.02") );
         col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
@@ -460,7 +548,7 @@ void createEnvironment(self_collision::Link::VecPtrCollision &col_array, KDL::Fr
         col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
         col_array.push_back( self_collision::createCollisionConvex(vertices, polygons, T_W_C*KDL::Frame(KDL::Vector(0,0.3,0)), "box 0.4 0.02 0.6") );
         col_array.back()->geometry->setColor(0, 0.5, 0.5, cabinet_a);
-
+//*/
 }
 
 bool randomizedIkSolution(const boost::shared_ptr<KinematicModel> &kin_model, const KDL::Frame &T_W_G_dest, Eigen::VectorXd &q) {

@@ -215,7 +215,7 @@ public:
         ros::Time last_time = ros::Time::now();
         KDL::Frame r_HAND_target;
         int loop_counter = 50000;
-        ros::Rate loop_rate(500);
+        ros::Rate loop_rate(200);
 
 //        boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.025, 3));
         boost::shared_ptr<ReachabilityMap > r_map(new ReachabilityMap(0.04, 3));
@@ -227,13 +227,6 @@ public:
         }
         else {
             std::cout << "created distance map" << std::endl;
-        }
-
-        // TEST: distance metric
-        if (false) {
-            r_map->printDistanceMap();
-            showMetric(q_eq, lower_bound, upper_bound, kin_model, col_model, r_map, markers_pub_);
-            return;
         }
 
         //
@@ -248,7 +241,7 @@ public:
         KDL::Frame T_W_G_cab2 = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.05, 0.0, 1.35));
         KDL::Frame T_W_G_cab3 = KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(1.15, -0.5, 1.35));
         KDL::Frame T_W_G_cab4 = KDL::Frame(KDL::Rotation::RotY(45.0/180.0*PI), KDL::Vector(1.05, 0, 2.0));
-        KDL::Frame T_W_G_cab5 = KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.8, 0.6, 1.8));
+        KDL::Frame T_W_G_cab5 = KDL::Frame(KDL::Rotation::RotZ(45.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.7, 0.5, 1.8));
         KDL::Frame T_W_G_weird = KDL::Frame(KDL::Vector(0.7, -0.6, 1.8));
         std::vector<KDL::Frame > vec_T_W_G;
 
@@ -314,33 +307,29 @@ public:
         // bin -> bin
         double q_bin1_tab[] = {0.186237,    1.43153,   -1.60876,    1.64294,   0.464018,  0.0838286,   -1.16511,   0.470589,    1.56105,    1.65937,   -1.51095,   -1.58767, 0.00154277, 1.5708, -1.5708};
         ts.addNode(T_W_G_bin2, q_bin1_tab, ndof, false);
-
+*/
         // cab_g -> cab_d
         double q_cab_g_tab[] = {0.890049,    2.28463,   -1.47813,    2.19092,    1.46628,   0.186504,  -0.785303,  -0.501551,     1.4145,    1.68104,   -1.44994,    -1.6063, 0.00322741,     1.5708,    -1.5708};
         ts.addNode(T_W_G_cab2, q_cab_g_tab, ndof, false);
-
+        for (int q_idx = 0; q_idx < ndof; q_idx++) {
+            q(q_idx) = q_cab_g_tab[q_idx];
+        }
+/*
         // lock -> cab_d
         ts.addNode(T_W_G_cab2, q_lock1_tab, ndof, false);
 //*/
 
+/*        // show the hierarchy levels
         // jlc
-//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.412733, -0.330106, 1.12433)), q_eq, false);
         ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.0133643, 0.729555, -0.03817, 0.682725), KDL::Vector(0.442317, -0.298677, 1.56104)), q_eq, true);
-
-
         // wcc
-//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.560519, 0.459226, 0.568173, 0.390013), KDL::Vector(0.412231, -0.345436, 1.12546)), q_eq, true);
-//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.644694, -0.19067, 0.705233, -0.22508), KDL::Vector(0.412231, -0.345436, 1.12546)), q_eq, true);
         ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.289029, -0.484604, 0.730593, -0.38452), KDL::Vector(0.52431, -0.466663, 1.38939)), q_eq, true);
-
-
         // col
-//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(0.412231, -0.345436, 1.12546)), q_eq, true);
-//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(0.119307, -0.0183768, 1.12177)), q_eq, true);
-        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.466042, 0.488403, 0.728058, 0.119158), KDL::Vector(0.0355551, 0.248136, 1.46636)), q_eq, true);
-
-        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(1.05653, -0.109096, 1.14599)), q_eq, true);
-
+//        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.466042, 0.488403, 0.728058, 0.119158), KDL::Vector(0.0355551, 0.248136, 1.46636)), q_eq, true);
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.466042, 0.488403, 0.728058, 0.119158), KDL::Vector(0.1, -0.1, 1.46636)), q_eq, true);
+        ts.addNode(KDL::Frame(KDL::Rotation::Quaternion(-0.476391, 0.558636, 0.470781, 0.489227), KDL::Vector(0.85653, -0.109096, 1.34599)), q_eq, true);
+*/
+//        ts.addNode(T_W_G_cab2, q_eq, false);
 
         // impossible move 2
 //        KDL::Frame T_W_G_weird2 = KDL::Frame(KDL::Rotation::RotX(160.0/180.0*PI) * KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.6, -0.4, 1.8));
@@ -352,15 +341,23 @@ public:
         for (int i=0; i<20; i++) {
             // calculate forward kinematics for all links
             for (int l_idx = 0; l_idx < col_model->getLinksCount(); l_idx++) {
-                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q_eq);
+                kin_model->calculateFk(links_fk[l_idx], col_model->getLinkName(l_idx), q);
             }
-            publishJointState(joint_state_pub_, q_eq, joint_names, ign_q, ign_joint_names);
+            publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
             int m_id = 0;
             m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
             markers_pub_.publish();
             ros::spinOnce();
             ros::Duration(0.1).sleep();
         }
+
+        // TEST: distance metric
+        if (true) {
+//            r_map->printDistanceMap();
+            showMetric(q_eq, lower_bound, upper_bound, kin_model, col_model, r_map, markers_pub_);
+            return;
+        }
+
 
 //        ros::Duration(1.0).sleep();
 
@@ -397,7 +394,7 @@ public:
                 sim->setTarget(r_HAND_target);
             }
             else if (mode == "target") {
-                if (loop_counter > 1500*2) {
+                if (loop_counter > 1500*5) {
                         if (ts.isFinished()) {
                             break;
                         }
@@ -407,8 +404,8 @@ public:
                             q = ts.getInitQ();
                             dq.setZero();
                             ddq.setZero();
-                            dq(4) = 5.0;
-                            q(4) = 20.0/180.0*PI;
+//                            dq(4) = 5.0;
+//                            q(4) = 20.0/180.0*PI;
 
                             sim->setState(q, dq, ddq);
                         }
@@ -435,7 +432,8 @@ public:
                 collision_in_prev_step = true;
                 std::cout << "collision begin" << std::endl;
                 printJointLimits(q, kin_model, joint_names);
-//                stop = true;
+                std::cout << q.transpose() << std::endl;
+                stop = true;
             }
             else if (!sim->inCollision() && collision_in_prev_step) {
                 collision_in_prev_step = false;
@@ -477,6 +475,30 @@ public:
                 publishJointState(joint_state_pub_, q, joint_names, ign_q, ign_joint_names);
                 int m_id = 0;
                 m_id = addRobotModelVis(markers_pub_, m_id, col_model, links_fk);
+
+                KDL::Vector path_curr = current_T_B_E.p;
+                bool path_stop = false;
+                while (!path_stop) {
+                    KDL::Vector gr, prev(path_curr);
+                    if (r_map->getGradient(path_curr, gr) && (path_curr - r_HAND_target.p).Norm() > 0.05) {
+                        path_curr += gr * 0.005;
+                    }
+                    else if ((path_curr - r_HAND_target.p).Norm() <= 0.05) {
+                        path_curr = r_HAND_target.p;
+                        path_stop = true;
+                    }
+                    else {
+                        gr = r_HAND_target.p - path_curr;
+                        gr.Normalize();
+                        path_curr += gr * 0.005;
+                    }
+                    m_id = markers_pub_.addVectorMarker(m_id, prev, path_curr, 1, 1, 1, 1, 0.005, "world");
+                }
+                markers_pub_.addEraseMarkers(m_id, m_id+300);
+
+//                m_id = markers_pub_.addVectorMarker(m_id, current_T_B_E.p, r_HAND_target.p, 1, 1, 1, 1, 0.005, "world");
+
+
                 markers_pub_.publish();
 //                markers_pub_.clear();
                 last_time = ros::Time::now();
