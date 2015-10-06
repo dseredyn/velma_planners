@@ -565,9 +565,11 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         90.0/180.0*PI,
         -90.0/180.0*PI,
         };
+        Eigen::VectorXd q_eq(ndof);
 
         for (int q_idx = 0; q_idx < ndof; q_idx++) {
             q(q_idx) = init_q[q_idx];
+            q_eq(q_idx) = init_q[q_idx];
         }
 
         std::string effector_name = "right_HandGripLink";
@@ -608,7 +610,8 @@ void make6DofMarker( interactive_markers::InteractiveMarkerServer &server, bool 
         max_q(6) = max_q(13) = 50.0/180.0*PI;   // arm_5_joint
         max_q(7) = max_q(14) = 50.0/180.0*PI;   // arm_6_joint
 
-        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, 100.0*max_q ) );
+//        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, 100.0*max_q ) );
+        boost::shared_ptr<DynamicsSimulatorHandPose> sim(new DynamicsSimulatorHandPose(ndof, 6, effector_name, col_model, kin_model, dyn_model, joint_names, q_eq, 10000.0*max_q ) );
 
         // loop variables
         ros::Time last_time = ros::Time::now();
