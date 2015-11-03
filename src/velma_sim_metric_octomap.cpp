@@ -35,6 +35,9 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <tf/transform_broadcaster.h>
 #include <interactive_markers/interactive_marker_server.h>
+#include <octomap/octomap.h>
+#include <octomap_msgs/conversions.h>
+#include <octomap_msgs/GetOctomap.h>
 
 #include <string>
 #include <stdlib.h>
@@ -88,6 +91,19 @@ public:
     void spin() {
         // initialize random seed
         srand(time(NULL));
+
+        octomap::AbstractOcTree *oc_map;
+        {
+            octomap_msgs::GetOctomap get_oc_map;
+            if (!ros::service::call("/octomap_binary", get_oc_map)) {
+                std::cout << "ERROR: ros::service::call(\"/octomap_binary\" " << std::endl;
+                return;
+            }
+            oc_map = octomap_msgs::fullMsgToMap( get_oc_map.response.map );
+        }
+
+//        std::cout << "ok" << std::endl;
+//        return;
 
         // dynamics model
         boost::shared_ptr<DynamicModel > dyn_model( new DynModelVelma() );
