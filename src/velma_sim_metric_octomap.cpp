@@ -92,19 +92,69 @@ public:
         // initialize random seed
         srand(time(NULL));
 
-        octomap::AbstractOcTree *oc_map;
+        boost::shared_ptr<octomap::OcTree > oc_map;
         {
             octomap_msgs::GetOctomap get_oc_map;
-            if (!ros::service::call("/octomap_binary", get_oc_map)) {
-                std::cout << "ERROR: ros::service::call(\"/octomap_binary\" " << std::endl;
+            if (!ros::service::call("/octomap_full", get_oc_map)) {
+                std::cout << "ERROR: ros::service::call(\"/octomap_full\" " << std::endl;
                 return;
             }
-            oc_map = octomap_msgs::fullMsgToMap( get_oc_map.response.map );
+            oc_map.reset( static_cast<octomap::OcTree* >( octomap_msgs::fullMsgToMap( get_oc_map.response.map ) ) );
+        }
+        oc_map->expand();
+
+        int occupied_count = 0;
+        std::list<octomap::OcTreeKey > del_key_list;
+        for (octomap::OcTree::leaf_iterator it = oc_map->begin_leafs(); it != oc_map->end_leafs(); it++) {
+            if(it->getOccupancy() <= oc_map->getOccupancyThres())
+            {
+                del_key_list.push_back(it.getKey());
+                continue;
+            }
+            occupied_count++;
         }
 
-//        std::cout << "ok" << std::endl;
-//        return;
+        for (std::list<octomap::OcTreeKey >::const_iterator it = del_key_list.begin(); it != del_key_list.end(); it++) {
+            oc_map->deleteNode( (*it) );
+        }
+/*
+        // visualize
+        int m_id = 0;
+        for (octomap::OcTree::leaf_iterator it = oc_map->begin_leafs(); it != oc_map->end_leafs(); it++) {
+            m_id = markers_pub_.addSinglePointMarker(m_id, KDL::Vector(it.getX(),it.getY(),it.getZ()), 0, 1, 0, 1, 0.1, "world");
+            std::cout << it.getX() << " " << it.getY() << " " << it.getZ() << std::endl;
+        }
 
+        int occu_idx = rand() % occupied_count;
+        octomap::OcTreeKey rand_key;
+        int idx = 0;
+        for (octomap::OcTree::leaf_iterator it = oc_map->begin_leafs(); it != oc_map->end_leafs(); it++, idx++) {
+            if (idx == occu_idx) {
+                rand_key = it.getKey();
+                break;
+            }
+        }
+
+        
+        del_key_list.clear();
+        std::list<octomap::OcTreeKey > exp_key_list;
+        // create new octomap
+        octomap::OcTree oc_new(oc_map->getResolution());
+        oc_new.updateNode(rand_key, true, false);
+        del_key_list.push_back(rand_key);
+        exp_key_list
+        
+
+        ros::Duration(1).sleep();
+
+        markers_pub_.publish();
+        ros::spinOnce();
+        ros::Duration(1).sleep();
+
+        std::cout << "getTreeDepth: " << oc_map->getTreeDepth() << std::endl;
+        std::cout << "occupied_count " << occupied_count << "  oc_map->getNumLeafNodes() " << oc_map->getNumLeafNodes() << std::endl;
+        return;
+*/
         // dynamics model
         boost::shared_ptr<DynamicModel > dyn_model( new DynModelVelma() );
 
@@ -125,12 +175,18 @@ public:
 
         KDL::Frame T_W_LOCK, T_W_BIN;
         createEnvironment(col_array, T_W_LOCK, T_W_BIN);
+        col_array.push_back( self_collision::createCollisionOctomap(oc_map, KDL::Frame()) );
 
         if (!col_model->addLink("env_link", "torso_base", col_array)) {
             ROS_ERROR("ERROR: could not add external collision objects to the collision model");
             return;
         }
         col_model->generateCollisionPairs();
+
+//        std::cout << "ok" << std::endl;
+//        return;
+
+        
 /*
         std::cout << "enabled collisions:" << std::endl;
         for (int i = 0; i < col_model->enabled_collisions.size(); i++) {
@@ -337,10 +393,14 @@ public:
 */
         // cab_g -> cab_d
         double q_cab_g_tab[] = {0.890049,    2.28463,   -1.47813,    2.19092,    1.46628,   0.186504,  -0.785303,  -0.501551,     1.4145,    1.68104,   -1.44994,    -1.6063, 0.00322741,     1.5708,    -1.5708};
-        ts.addNode(T_W_G_cab2, q_cab_g_tab, ndof, false);
+//        ts.addNode(T_W_G_cab2, q_cab_g_tab, ndof, false);
         for (int q_idx = 0; q_idx < ndof; q_idx++) {
             q(q_idx) = q_cab_g_tab[q_idx];
         }
+
+        ts.addNode(KDL::Frame(KDL::Rotation::RotY(90.0/180.0*PI), KDL::Vector(0.8, 0.0, 1.22)), q_cab_g_tab, ndof, false);
+
+
 /*
         // lock -> cab_d
         ts.addNode(T_W_G_cab2, q_lock1_tab, ndof, false);
